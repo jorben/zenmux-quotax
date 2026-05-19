@@ -51,9 +51,6 @@ public final class StatusBarView: NSView {
         drawBackground(in: bounds)
 
         let labelX: CGFloat = 4
-        let labelWidth: CGFloat = 18
-        let valueX = labelX + labelWidth + 1
-        let valueWidth = max(0, bounds.width - valueX - 4)
         let rowHeight: CGFloat = 10
         let totalHeight = rowHeight * 2
         let topY = (bounds.height + totalHeight) / 2 - rowHeight
@@ -68,8 +65,8 @@ public final class StatusBarView: NSView {
 
         let quota5 = quotaDisplay(for: apiService?.subscriptionData?.quota5Hour)
         let quota7 = quotaDisplay(for: apiService?.subscriptionData?.quota7Day)
-        drawRow(label: "5H", value: quota5.text, labelX: labelX, labelWidth: labelWidth, valueX: valueX, valueWidth: valueWidth, y: topY, color: color)
-        drawRow(label: "7D", value: quota7.text, labelX: labelX, labelWidth: labelWidth, valueX: valueX, valueWidth: valueWidth, y: bottomY, color: color)
+        drawRow(label: "5H", value: quota5.text, labelX: labelX, y: topY, color: color, bounds: bounds)
+        drawRow(label: "7D", value: quota7.text, labelX: labelX, y: bottomY, color: color, bounds: bounds)
     }
 
     private func drawBackground(in bounds: NSRect) {
@@ -87,19 +84,25 @@ public final class StatusBarView: NSView {
         }
     }
 
-    private func drawRow(label: String, value: String, labelX: CGFloat, labelWidth: CGFloat, valueX: CGFloat, valueWidth: CGFloat, y: CGFloat, color: NSColor) {
+    private func drawRow(label: String, value: String, labelX: CGFloat, y: CGFloat, color: NSColor, bounds: NSRect) {
+        let baseAttributes: [NSAttributedString.Key: Any] = [
+            .font: NSFont.monospacedDigitSystemFont(ofSize: 10, weight: .semibold),
+            .foregroundColor: color.usingColorSpace(.deviceRGB) ?? NSColor.white
+        ]
+
+        let labelWidth = ceil((label as NSString).size(withAttributes: baseAttributes).width)
+        let gap: CGFloat = 1
+        let trailingInset: CGFloat = 4
+        let valueX = labelX + labelWidth + gap
+        let valueWidth = max(0, bounds.width - valueX - trailingInset)
+
         let labelParagraph = NSMutableParagraphStyle()
         labelParagraph.alignment = .right
         labelParagraph.lineBreakMode = .byClipping
 
         let valueParagraph = NSMutableParagraphStyle()
-        valueParagraph.alignment = .right
+        valueParagraph.alignment = .left
         valueParagraph.lineBreakMode = .byTruncatingTail
-
-        let baseAttributes: [NSAttributedString.Key: Any] = [
-            .font: NSFont.monospacedDigitSystemFont(ofSize: 10, weight: .semibold),
-            .foregroundColor: color.usingColorSpace(.deviceRGB) ?? NSColor.white
-        ]
 
         var labelAttributes = baseAttributes
         labelAttributes[.paragraphStyle] = labelParagraph
