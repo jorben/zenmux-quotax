@@ -52,7 +52,7 @@ public final class StatusBarView: NSView {
 
         let labelX: CGFloat = 4
         let labelWidth: CGFloat = 18
-        let valueX = labelX + labelWidth + 2
+        let valueX = labelX + labelWidth + 1
         let valueWidth = max(0, bounds.width - valueX - 4)
         let rowHeight: CGFloat = 10
         let totalHeight = rowHeight * 2
