@@ -75,7 +75,9 @@ public final class StatusBarView: NSView {
             measuredWidth(for: "5H", attributes: textAttributes),
             measuredWidth(for: "7D", attributes: textAttributes)
         )
+        let reservedValueWidth = measuredWidth(for: "100.00%", attributes: textAttributes)
         let valueWidth = max(
+            reservedValueWidth,
             measuredWidth(for: quota5.text, attributes: textAttributes),
             measuredWidth(for: quota7.text, attributes: textAttributes)
         )
@@ -139,7 +141,7 @@ public final class StatusBarView: NSView {
         labelParagraph.lineBreakMode = .byClipping
 
         let valueParagraph = NSMutableParagraphStyle()
-        valueParagraph.alignment = .left
+        valueParagraph.alignment = .right
         valueParagraph.lineBreakMode = .byTruncatingTail
 
         var labelAttributes = baseAttributes
