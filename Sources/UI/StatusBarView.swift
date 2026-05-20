@@ -50,7 +50,6 @@ public final class StatusBarView: NSView {
     private func drawQuotaStatus(in bounds: NSRect) {
         drawBackground(in: bounds)
 
-        let labelX: CGFloat = 4
         let rowHeight: CGFloat = 10
         let totalHeight = rowHeight * 2
         let topY = (bounds.height + totalHeight) / 2 - rowHeight
@@ -65,8 +64,44 @@ public final class StatusBarView: NSView {
 
         let quota5 = quotaDisplay(for: apiService?.subscriptionData?.quota5Hour)
         let quota7 = quotaDisplay(for: apiService?.subscriptionData?.quota7Day)
-        drawRow(label: "5H", value: quota5.text, labelX: labelX, y: topY, color: color, bounds: bounds)
-        drawRow(label: "7D", value: quota7.text, labelX: labelX, y: bottomY, color: color, bounds: bounds)
+
+        let font = NSFont.monospacedDigitSystemFont(ofSize: 10, weight: .semibold)
+        let textAttributes: [NSAttributedString.Key: Any] = [
+            .font: font,
+            .foregroundColor: color.usingColorSpace(.deviceRGB) ?? NSColor.white
+        ]
+
+        let labelWidth = max(
+            measuredWidth(for: "5H", attributes: textAttributes),
+            measuredWidth(for: "7D", attributes: textAttributes)
+        )
+        let valueWidth = max(
+            measuredWidth(for: quota5.text, attributes: textAttributes),
+            measuredWidth(for: quota7.text, attributes: textAttributes)
+        )
+        let gap: CGFloat = 2
+        let totalWidth = labelWidth + gap + valueWidth
+        let groupX = max(0, ((bounds.width - totalWidth) / 2).rounded())
+
+        let topLayout = RowLayout(
+            groupX: groupX,
+            labelWidth: labelWidth,
+            valueWidth: valueWidth,
+            y: topY,
+            gap: gap,
+            height: rowHeight
+        )
+        let bottomLayout = RowLayout(
+            groupX: groupX,
+            labelWidth: labelWidth,
+            valueWidth: valueWidth,
+            y: bottomY,
+            gap: gap,
+            height: rowHeight
+        )
+
+        drawRow(label: "5H", value: quota5.text, layout: topLayout, color: color)
+        drawRow(label: "7D", value: quota7.text, layout: bottomLayout, color: color)
     }
 
     private func drawBackground(in bounds: NSRect) {
@@ -84,17 +119,20 @@ public final class StatusBarView: NSView {
         }
     }
 
-    private func drawRow(label: String, value: String, labelX: CGFloat, y: CGFloat, color: NSColor, bounds: NSRect) {
+    private struct RowLayout {
+        let groupX: CGFloat
+        let labelWidth: CGFloat
+        let valueWidth: CGFloat
+        let y: CGFloat
+        let gap: CGFloat
+        let height: CGFloat
+    }
+
+    private func drawRow(label: String, value: String, layout: RowLayout, color: NSColor) {
         let baseAttributes: [NSAttributedString.Key: Any] = [
             .font: NSFont.monospacedDigitSystemFont(ofSize: 10, weight: .semibold),
             .foregroundColor: color.usingColorSpace(.deviceRGB) ?? NSColor.white
         ]
-
-        let labelWidth = ceil((label as NSString).size(withAttributes: baseAttributes).width)
-        let gap: CGFloat = 1
-        let trailingInset: CGFloat = 4
-        let valueX = labelX + labelWidth + gap
-        let valueWidth = max(0, bounds.width - valueX - trailingInset)
 
         let labelParagraph = NSMutableParagraphStyle()
         labelParagraph.alignment = .right
@@ -107,16 +145,20 @@ public final class StatusBarView: NSView {
         var labelAttributes = baseAttributes
         labelAttributes[.paragraphStyle] = labelParagraph
         (label as NSString).draw(
-            in: NSRect(x: labelX, y: y, width: labelWidth, height: 10),
+            in: NSRect(x: layout.groupX, y: layout.y, width: layout.labelWidth, height: layout.height),
             withAttributes: labelAttributes
         )
 
         var valueAttributes = baseAttributes
         valueAttributes[.paragraphStyle] = valueParagraph
         (value as NSString).draw(
-            in: NSRect(x: valueX, y: y, width: valueWidth, height: 10),
+            in: NSRect(x: layout.groupX + layout.labelWidth + layout.gap, y: layout.y, width: layout.valueWidth, height: layout.height),
             withAttributes: valueAttributes
         )
+    }
+
+    private func measuredWidth(for string: String, attributes: [NSAttributedString.Key: Any]) -> CGFloat {
+        ceil((string as NSString).size(withAttributes: attributes).width)
     }
 
     private func quotaDisplay(for quota: ZenmuxQuotaWindow?) -> (text: String, progress: Double?) {
