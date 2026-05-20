@@ -57,8 +57,6 @@ public final class StatusBarView: NSView {
     }
 
     private func drawQuotaStatus(in bounds: NSRect) {
-        drawBackground(in: bounds)
-
         let rowHeight: CGFloat = 11
         let rowGap: CGFloat = 0
         let totalHeight = rowHeight * 2 + rowGap
@@ -305,12 +303,6 @@ public final class StatusBarView: NSView {
             in: NSRect(x: rect.minX, y: bottomY, width: rect.width, height: rowHeight),
             color: context.color.withAlphaComponent(0.72)
         )
-    }
-
-    private func drawBackground(in bounds: NSRect) {
-        let rect = bounds.insetBy(dx: 1, dy: 0.5)
-        NSColor.controlAccentColor.withAlphaComponent(0.08).setFill()
-        NSBezierPath(roundedRect: rect, xRadius: 6, yRadius: 6).fill()
     }
 
     private func statusBarDataColor() -> NSColor {
