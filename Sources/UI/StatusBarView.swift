@@ -75,7 +75,7 @@ public final class StatusBarView: NSView {
             measuredWidth(for: "5H", attributes: textAttributes),
             measuredWidth(for: "7D", attributes: textAttributes)
         )
-        let reservedValueWidth = measuredWidth(for: "100.00%", attributes: textAttributes)
+        let reservedValueWidth = measuredWidth(for: "99.9%", attributes: textAttributes)
         let valueWidth = max(
             reservedValueWidth,
             measuredWidth(for: quota5.text, attributes: textAttributes),
@@ -188,11 +188,15 @@ public final class StatusBarView: NSView {
     }
 
     private func formatPercent(_ value: Double) -> String {
-        let percent = value * 100
-        let rounded = (percent * 100).rounded() / 100
+        let clamped = max(0, value)
+        if clamped >= 1 {
+            return "100%"
+        }
+        let percent = clamped * 100
+        let rounded = (percent * 10).rounded() / 10
         let formatter = NumberFormatter()
-        formatter.minimumFractionDigits = 0
-        formatter.maximumFractionDigits = 2
+        formatter.minimumFractionDigits = 1
+        formatter.maximumFractionDigits = 1
         formatter.numberStyle = .decimal
         return "\(formatter.string(from: NSNumber(value: rounded)) ?? String(rounded))%"
     }
