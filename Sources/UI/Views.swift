@@ -847,19 +847,23 @@ struct SettingsView: View {
 
                 rowDivider
 
+                statusBarStyleSection
+
+                rowDivider
+
                 settingRow(
-                    title: "Status bar color",
-                    subtitle: "Choose a fixed data color independent of app theme."
+                    title: "Status bar mode",
+                    subtitle: "Use auto, light, or dark content in the menu bar status item."
                 ) {
-                    Picker("Status bar color", selection: $settings.statusBarDataColorMode) {
+                    Picker("Status bar mode", selection: $settings.statusBarDataColorMode) {
                         ForEach(StatusBarDataColorMode.allCases) { mode in
                             Text(mode.title).tag(mode)
                         }
                     }
                     .labelsHidden()
-                    .accessibilityLabel("Status bar color")
+                    .accessibilityLabel("Status bar mode")
                     .pickerStyle(.segmented)
-                    .frame(width: 160)
+                    .frame(width: 220)
                 }
 
                 rowDivider
@@ -875,10 +879,84 @@ struct SettingsView: View {
                     }
                     .labelsHidden()
                     .accessibilityLabel("Time zone")
-                    .frame(minWidth: 280, idealWidth: 320)
+                    .frame(width: 320)
                 }
             }
         }
+    }
+
+    private var statusBarStyleSection: some View {
+        VStack(alignment: .leading, spacing: 12) {
+            HStack(alignment: .firstTextBaseline) {
+                VStack(alignment: .leading, spacing: 3) {
+                    Text("Status bar style")
+                        .font(.subheadline)
+                        .fontWeight(.medium)
+                    Text("Choose how quota data is visualized in the menu bar.")
+                        .font(.caption)
+                        .foregroundStyle(.secondary)
+                }
+
+                Spacer(minLength: 12)
+
+                Text(settings.statusBarPresentationStyle.title)
+                    .font(.caption)
+                    .fontWeight(.semibold)
+                    .foregroundStyle(Color.accentColor)
+            }
+
+            statusBarStyleSelector
+        }
+    }
+
+    private var statusBarStyleSelector: some View {
+        LazyVGrid(columns: Array(repeating: GridItem(.flexible(), spacing: 10), count: 4), spacing: 10) {
+            ForEach(StatusBarPresentationStyle.allCases) { style in
+                Button {
+                    settings.statusBarPresentationStyle = style
+                } label: {
+                    statusBarStyleOption(style)
+                }
+                .buttonStyle(.plain)
+                .accessibilityLabel("Status bar style: \(style.title)")
+                .help(style.title)
+            }
+        }
+    }
+
+    private func statusBarStyleOption(_ style: StatusBarPresentationStyle) -> some View {
+        let isSelected = settings.statusBarPresentationStyle == style
+        return VStack(spacing: 7) {
+            StatusBarStylePreviewPill(style: style)
+                .frame(height: 32)
+
+            Text(style.title)
+                .font(.caption2)
+                .fontWeight(.medium)
+                .foregroundStyle(isSelected ? Color.accentColor : Color.secondary)
+                .lineLimit(1)
+        }
+        .frame(maxWidth: .infinity)
+        .padding(.vertical, 10)
+        .padding(.horizontal, 8)
+        .background {
+            RoundedRectangle(cornerRadius: 14, style: .continuous)
+                .fill(isSelected ? Color.accentColor.opacity(0.10) : Color.primary.opacity(0.035))
+        }
+        .overlay {
+            RoundedRectangle(cornerRadius: 14, style: .continuous)
+                .strokeBorder(isSelected ? Color.accentColor : Color.primary.opacity(0.08), lineWidth: isSelected ? 2 : 1)
+        }
+        .overlay(alignment: .topTrailing) {
+            if isSelected {
+                Image(systemName: "checkmark.circle.fill")
+                    .font(.system(size: 14, weight: .semibold))
+                    .symbolRenderingMode(.palette)
+                    .foregroundStyle(.white, Color.accentColor)
+                    .offset(x: 5, y: -5)
+            }
+        }
+        .contentShape(RoundedRectangle(cornerRadius: 14, style: .continuous))
     }
 
     private var diagnosticsSection: some View {
@@ -945,8 +1023,8 @@ struct SettingsView: View {
             Spacer(minLength: 12)
 
             control()
-                .frame(alignment: .trailing)
         }
+        .frame(maxWidth: .infinity, alignment: .leading)
     }
 
     private func settingsCard<Content: View>(icon: String, title: String, subtitle: String, @ViewBuilder content: () -> Content) -> some View {

@@ -93,6 +93,9 @@ public final class AppDelegate: NSObject, NSApplicationDelegate, NSWindowDelegat
         let view = StatusBarView(frame: NSRect(x: 0, y: 0, width: statusWidth, height: NSStatusBar.system.thickness))
         view.apiService = apiService
         view.settings = settings
+        view.preferredWidthDidChange = { [weak item] width in
+            item?.length = width
+        }
         item.button?.title = ""
         item.button?.image = nil
         item.button?.target = self
@@ -144,7 +147,10 @@ public final class AppDelegate: NSObject, NSApplicationDelegate, NSWindowDelegat
         panel.hidesOnDeactivate = false
 
         if let screenFrame = button.window?.screen?.visibleFrame, let buttonFrame = button.window?.convertToScreen(button.frame) {
-            let originX = min(max(buttonFrame.midX - menuWidth / 2, screenFrame.minX + AppConstants.Menu.edgeInset), screenFrame.maxX - menuWidth - AppConstants.Menu.edgeInset)
+            let originX = min(
+                max(buttonFrame.midX - menuWidth / 2, screenFrame.minX + AppConstants.Menu.edgeInset),
+                screenFrame.maxX - menuWidth - AppConstants.Menu.edgeInset
+            )
             let originY = buttonFrame.minY - panelHeight - AppConstants.Menu.verticalOffset
             panel.setFrameOrigin(NSPoint(x: originX, y: originY))
         } else if let screenFrame = NSScreen.main?.visibleFrame {
