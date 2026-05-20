@@ -32,15 +32,43 @@ public enum AppearanceMode: String, CaseIterable, Identifiable {
 }
 
 public enum StatusBarDataColorMode: String, CaseIterable, Identifiable {
-    case white
-    case black
+    case auto
+    case light = "white"
+    case dark = "black"
 
     public var id: String { rawValue }
 
     public var title: String {
         switch self {
-        case .white: return "White"
-        case .black: return "Black"
+        case .auto: return "Auto"
+        case .light: return "Light"
+        case .dark: return "Dark"
+        }
+    }
+}
+
+public enum StatusBarPresentationStyle: String, CaseIterable, Identifiable {
+    case labelsAndPercentage
+    case iconAndPercentage
+    case doubleRingAndPercentage
+    case doubleBarAndPercentage
+    case doubleRing
+    case doubleBar
+    case percentageOnly
+    case iconOnly
+
+    public var id: String { rawValue }
+
+    public var title: String {
+        switch self {
+        case .labelsAndPercentage: return "Labels + %"
+        case .iconAndPercentage: return "Icon + %"
+        case .doubleRingAndPercentage: return "Double ring + %"
+        case .doubleBarAndPercentage: return "Bars + %"
+        case .doubleRing: return "Double ring"
+        case .doubleBar: return "Bars"
+        case .percentageOnly: return "% only"
+        case .iconOnly: return "Icon only"
         }
     }
 }
@@ -55,6 +83,7 @@ public final class SettingsManager: ObservableObject {
         static let alwaysRefresh = "alwaysRefresh"
         static let statusBarQuotaDisplayMode = "statusBarQuotaDisplayMode"
         static let statusBarDataColorMode = "statusBarDataColorMode"
+        static let statusBarPresentationStyle = "statusBarPresentationStyle"
         static let appearanceMode = "appearanceMode"
         static let timeZoneIdentifier = "timeZoneIdentifier"
         static let launchAtLogin = "launchAtLogin"
@@ -84,6 +113,10 @@ public final class SettingsManager: ObservableObject {
 
     @Published public var statusBarDataColorMode: StatusBarDataColorMode {
         didSet { defaults.set(statusBarDataColorMode.rawValue, forKey: Keys.statusBarDataColorMode) }
+    }
+
+    @Published public var statusBarPresentationStyle: StatusBarPresentationStyle {
+        didSet { defaults.set(statusBarPresentationStyle.rawValue, forKey: Keys.statusBarPresentationStyle) }
     }
 
     @Published public var appearanceMode: AppearanceMode {
@@ -120,8 +153,10 @@ public final class SettingsManager: ObservableObject {
         self.alwaysRefresh = defaults.object(forKey: Keys.alwaysRefresh) as? Bool ?? true
         let storedDisplayMode = defaults.string(forKey: Keys.statusBarQuotaDisplayMode) ?? StatusBarQuotaDisplayMode.used.rawValue
         self.statusBarQuotaDisplayMode = StatusBarQuotaDisplayMode(rawValue: storedDisplayMode) ?? .used
-        let storedStatusBarDataColorMode = defaults.string(forKey: Keys.statusBarDataColorMode) ?? StatusBarDataColorMode.white.rawValue
-        self.statusBarDataColorMode = StatusBarDataColorMode(rawValue: storedStatusBarDataColorMode) ?? .white
+        let storedStatusBarDataColorMode = defaults.string(forKey: Keys.statusBarDataColorMode) ?? StatusBarDataColorMode.auto.rawValue
+        self.statusBarDataColorMode = StatusBarDataColorMode(rawValue: storedStatusBarDataColorMode) ?? .auto
+        let storedPresentationStyle = defaults.string(forKey: Keys.statusBarPresentationStyle) ?? StatusBarPresentationStyle.labelsAndPercentage.rawValue
+        self.statusBarPresentationStyle = StatusBarPresentationStyle(rawValue: storedPresentationStyle) ?? .labelsAndPercentage
         let storedAppearanceMode = defaults.string(forKey: Keys.appearanceMode) ?? AppearanceMode.system.rawValue
         self.appearanceMode = AppearanceMode(rawValue: storedAppearanceMode) ?? .system
         let storedTimeZone = defaults.string(forKey: Keys.timeZoneIdentifier) ?? TimeZone.current.identifier

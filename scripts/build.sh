@@ -32,6 +32,7 @@ done < <(find "$ROOT/Sources" -name '*.swift' -print0 | sort -z)
 
 cp "$ROOT/Info.plist" "$CONTENTS/Info.plist"
 cp "$ROOT/Resources/AppIcon.icns" "$RESOURCES/AppIcon.icns"
+cp "$ROOT/Resources/zenmux.svg" "$RESOURCES/zenmux.svg"
 printf 'APPL????' > "$CONTENTS/PkgInfo"
 
 /usr/bin/plutil -lint "$CONTENTS/Info.plist"
