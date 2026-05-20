@@ -50,10 +50,6 @@ public final class StatusBarView: NSView {
     private func drawQuotaStatus(in bounds: NSRect) {
         drawBackground(in: bounds)
 
-        let labelX: CGFloat = 4
-        let labelWidth: CGFloat = 18
-        let valueX = labelX + labelWidth + 2
-        let valueWidth = max(0, bounds.width - valueX - 4)
         let rowHeight: CGFloat = 10
         let totalHeight = rowHeight * 2
         let topY = (bounds.height + totalHeight) / 2 - rowHeight
@@ -68,8 +64,46 @@ public final class StatusBarView: NSView {
 
         let quota5 = quotaDisplay(for: apiService?.subscriptionData?.quota5Hour)
         let quota7 = quotaDisplay(for: apiService?.subscriptionData?.quota7Day)
-        drawRow(label: "5H", value: quota5.text, labelX: labelX, labelWidth: labelWidth, valueX: valueX, valueWidth: valueWidth, y: topY, color: color)
-        drawRow(label: "7D", value: quota7.text, labelX: labelX, labelWidth: labelWidth, valueX: valueX, valueWidth: valueWidth, y: bottomY, color: color)
+
+        let font = NSFont.monospacedDigitSystemFont(ofSize: 10, weight: .semibold)
+        let textAttributes: [NSAttributedString.Key: Any] = [
+            .font: font,
+            .foregroundColor: color.usingColorSpace(.deviceRGB) ?? NSColor.white
+        ]
+
+        let labelWidth = max(
+            measuredWidth(for: "5H", attributes: textAttributes),
+            measuredWidth(for: "7D", attributes: textAttributes)
+        )
+        let reservedValueWidth = measuredWidth(for: "99.9%", attributes: textAttributes)
+        let valueWidth = max(
+            reservedValueWidth,
+            measuredWidth(for: quota5.text, attributes: textAttributes),
+            measuredWidth(for: quota7.text, attributes: textAttributes)
+        )
+        let gap: CGFloat = 2
+        let totalWidth = labelWidth + gap + valueWidth
+        let groupX = max(0, ((bounds.width - totalWidth) / 2).rounded())
+
+        let topLayout = RowLayout(
+            groupX: groupX,
+            labelWidth: labelWidth,
+            valueWidth: valueWidth,
+            y: topY,
+            gap: gap,
+            height: rowHeight
+        )
+        let bottomLayout = RowLayout(
+            groupX: groupX,
+            labelWidth: labelWidth,
+            valueWidth: valueWidth,
+            y: bottomY,
+            gap: gap,
+            height: rowHeight
+        )
+
+        drawRow(label: "5H", value: quota5.text, layout: topLayout, color: color)
+        drawRow(label: "7D", value: quota7.text, layout: bottomLayout, color: color)
     }
 
     private func drawBackground(in bounds: NSRect) {
@@ -87,7 +121,21 @@ public final class StatusBarView: NSView {
         }
     }
 
-    private func drawRow(label: String, value: String, labelX: CGFloat, labelWidth: CGFloat, valueX: CGFloat, valueWidth: CGFloat, y: CGFloat, color: NSColor) {
+    private struct RowLayout {
+        let groupX: CGFloat
+        let labelWidth: CGFloat
+        let valueWidth: CGFloat
+        let y: CGFloat
+        let gap: CGFloat
+        let height: CGFloat
+    }
+
+    private func drawRow(label: String, value: String, layout: RowLayout, color: NSColor) {
+        let baseAttributes: [NSAttributedString.Key: Any] = [
+            .font: NSFont.monospacedDigitSystemFont(ofSize: 10, weight: .semibold),
+            .foregroundColor: color.usingColorSpace(.deviceRGB) ?? NSColor.white
+        ]
+
         let labelParagraph = NSMutableParagraphStyle()
         labelParagraph.alignment = .right
         labelParagraph.lineBreakMode = .byClipping
@@ -96,24 +144,23 @@ public final class StatusBarView: NSView {
         valueParagraph.alignment = .right
         valueParagraph.lineBreakMode = .byTruncatingTail
 
-        let baseAttributes: [NSAttributedString.Key: Any] = [
-            .font: NSFont.monospacedDigitSystemFont(ofSize: 10, weight: .semibold),
-            .foregroundColor: color.usingColorSpace(.deviceRGB) ?? NSColor.white
-        ]
-
         var labelAttributes = baseAttributes
         labelAttributes[.paragraphStyle] = labelParagraph
         (label as NSString).draw(
-            in: NSRect(x: labelX, y: y, width: labelWidth, height: 10),
+            in: NSRect(x: layout.groupX, y: layout.y, width: layout.labelWidth, height: layout.height),
             withAttributes: labelAttributes
         )
 
         var valueAttributes = baseAttributes
         valueAttributes[.paragraphStyle] = valueParagraph
         (value as NSString).draw(
-            in: NSRect(x: valueX, y: y, width: valueWidth, height: 10),
+            in: NSRect(x: layout.groupX + layout.labelWidth + layout.gap, y: layout.y, width: layout.valueWidth, height: layout.height),
             withAttributes: valueAttributes
         )
+    }
+
+    private func measuredWidth(for string: String, attributes: [NSAttributedString.Key: Any]) -> CGFloat {
+        ceil((string as NSString).size(withAttributes: attributes).width)
     }
 
     private func quotaDisplay(for quota: ZenmuxQuotaWindow?) -> (text: String, progress: Double?) {
@@ -141,11 +188,15 @@ public final class StatusBarView: NSView {
     }
 
     private func formatPercent(_ value: Double) -> String {
-        let percent = value * 100
-        let rounded = (percent * 100).rounded() / 100
+        let normalized = min(max(0, value), 1)
+        let percent = normalized * 100
+        let rounded = (percent * 10).rounded() / 10
+        if rounded >= 100 {
+            return "100%"
+        }
         let formatter = NumberFormatter()
-        formatter.minimumFractionDigits = 0
-        formatter.maximumFractionDigits = 2
+        formatter.minimumFractionDigits = 1
+        formatter.maximumFractionDigits = 1
         formatter.numberStyle = .decimal
         return "\(formatter.string(from: NSNumber(value: rounded)) ?? String(rounded))%"
     }
