@@ -188,12 +188,12 @@ public final class StatusBarView: NSView {
     }
 
     private func formatPercent(_ value: Double) -> String {
-        let clamped = max(0, value)
-        if clamped >= 1 {
+        let normalized = min(max(0, value), 1)
+        let percent = normalized * 100
+        let rounded = (percent * 10).rounded() / 10
+        if rounded >= 100 {
             return "100%"
         }
-        let percent = clamped * 100
-        let rounded = (percent * 10).rounded() / 10
         let formatter = NumberFormatter()
         formatter.minimumFractionDigits = 1
         formatter.maximumFractionDigits = 1
