@@ -15,6 +15,8 @@ public final class AppDelegate: NSObject, NSApplicationDelegate, NSWindowDelegat
     private let menuWidth: CGFloat = AppConstants.Menu.width
     private var menuHost: NSHostingView<MenuContentView>?
     private var appearanceCancellable: AnyCancellable?
+    private var proxyCancellable: AnyCancellable?
+    private var lastProxyConfig: ProxyConfiguration?
     private var localEventMonitor: Any?
     private var globalEventMonitor: Any?
 
@@ -28,6 +30,7 @@ public final class AppDelegate: NSObject, NSApplicationDelegate, NSWindowDelegat
         settings.refreshLaunchAtLoginStatus()
         setupApplicationMenu()
         setupStatusItem()
+        setupProxySubscription()
         apiService.startAutoRefresh(settings: settings)
         if settings.trimmedAPIKey.isEmpty {
             openSettings()
@@ -43,6 +46,41 @@ public final class AppDelegate: NSObject, NSApplicationDelegate, NSWindowDelegat
     public func applicationWillTerminate(_ notification: Notification) {
         AppLog.lifecycle.info("Application will terminate")
         AppLog.shutdown(reason: "applicationWillTerminate")
+    }
+
+    private func setupProxySubscription() {
+        proxyCancellable = settings.objectWillChange
+            .debounce(for: .milliseconds(300), scheduler: DispatchQueue.main)
+            .sink { [weak self] in
+                guard let self else { return }
+                let newConfig = self.settings.proxyConfiguration
+                if !ProxyConfiguration.isEqual(self.lastProxyConfig, newConfig) {
+                    // Prevent silent fallback to direct connection when the user selected
+                    // manual proxy mode but the configuration is invalid (nil).
+                    // In that case, keep the previous proxy settings and log a warning
+                    // rather than routing traffic unproxied.
+                    if newConfig == nil && self.settings.proxyMode == .manual {
+                        AppLog.settings.warning(
+                            "Manual proxy configuration is incomplete or invalid; keeping previous proxy settings until the configuration is corrected"
+                        )
+                        return
+                    }
+                    self.lastProxyConfig = newConfig
+                    self.apiService.updateProxyConfiguration(newConfig)
+                }
+            }
+        lastProxyConfig = settings.proxyConfiguration
+        // At startup, guard against an invalid manual proxy configuration:
+        // if the user selected manual mode but the config is incomplete/invalid,
+        // proxyConfiguration returns nil which would route traffic directly.
+        // Keep the default no-proxy session instead and log a warning.
+        if settings.proxyMode == .manual && lastProxyConfig == nil {
+            AppLog.settings.warning(
+                "Manual proxy configuration is incomplete or invalid at startup; using direct connection until the configuration is corrected"
+            )
+        } else {
+            apiService.updateProxyConfiguration(lastProxyConfig)
+        }
     }
 
     private func applyAppearanceMode(_ mode: AppearanceMode) {

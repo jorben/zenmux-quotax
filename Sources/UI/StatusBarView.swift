@@ -88,16 +88,14 @@ public final class StatusBarView: NSView {
         let ringSize = statusRingSize(in: bounds)
         let barSize = statusBarProgressSize(in: bounds)
         let style = settings?.statusBarPresentationStyle ?? .labelsAndPercentage
-        updatePreferredStatusWidth(
-            preferredWidth(
-                for: style,
-                labelWidth: labelWidth,
-                valueWidth: valueWidth,
-                iconWidth: iconSize.width,
-                ringWidth: ringSize.width,
-                barWidth: barSize.width
-            )
+        let widthMetrics = WidthMetrics(
+            label: labelWidth,
+            value: valueWidth,
+            icon: iconSize.width,
+            ring: ringSize.width,
+            bar: barSize.width
         )
+        updatePreferredStatusWidth(preferredWidth(for: style, metrics: widthMetrics))
 
         let context = RenderContext(
             quota5: quota5.text,
@@ -305,84 +303,6 @@ public final class StatusBarView: NSView {
         )
     }
 
-    private func statusBarDataColor() -> NSColor {
-        switch settings?.statusBarDataColorMode ?? .auto {
-        case .auto:
-            return automaticStatusBarDataColor()
-        case .light:
-            return .white
-        case .dark:
-            return .black
-        }
-    }
-
-    private func automaticStatusBarDataColor() -> NSColor {
-        let appearance = window?.effectiveAppearance ?? effectiveAppearance
-        let match = appearance.bestMatch(from: [.darkAqua, .aqua])
-        return match == .darkAqua ? .white : .black
-    }
-
-    private func statusIconSize(in bounds: NSRect) -> NSSize {
-        let height = min(bounds.height - 7, CGFloat(17))
-        return NSSize(width: ceil(height * Self.zenmuxIconAspectRatio), height: height)
-    }
-
-    private func statusRingSize(in bounds: NSRect) -> NSSize {
-        let size = min(bounds.height - 4, CGFloat(22))
-        return NSSize(width: size, height: size)
-    }
-
-    private func statusBarProgressSize(in bounds: NSRect) -> NSSize {
-        NSSize(width: 28, height: min(bounds.height - 8, CGFloat(18)))
-    }
-
-    private func preferredWidth(
-        for style: StatusBarPresentationStyle,
-        labelWidth: CGFloat,
-        valueWidth: CGFloat,
-        iconWidth: CGFloat,
-        ringWidth: CGFloat,
-        barWidth: CGFloat
-    ) -> CGFloat {
-        let contentWidth: CGFloat
-        switch style {
-        case .labelsAndPercentage:
-            contentWidth = labelWidth + 2 + valueWidth
-        case .iconAndPercentage:
-            contentWidth = iconWidth + 4 + valueWidth
-        case .doubleRingAndPercentage:
-            contentWidth = ringWidth + 4 + valueWidth
-        case .doubleBarAndPercentage:
-            contentWidth = barWidth + 4 + valueWidth
-        case .doubleRing:
-            contentWidth = ringWidth
-        case .doubleBar:
-            contentWidth = barWidth
-        case .percentageOnly:
-            contentWidth = valueWidth
-        case .iconOnly:
-            contentWidth = iconWidth
-        }
-        let padding: CGFloat
-        let minimumWidth: CGFloat
-        switch style {
-        case .doubleRing, .doubleBar, .percentageOnly, .iconOnly:
-            padding = Self.compactHorizontalContentPadding
-            minimumWidth = Self.compactMinimumStatusWidth
-        default:
-            padding = Self.horizontalContentPadding
-            minimumWidth = Self.minimumStatusWidth
-        }
-        return max(minimumWidth, ceil(contentWidth + padding))
-    }
-
-    private func updatePreferredStatusWidth(_ width: CGFloat) {
-        guard abs(width - preferredStatusWidth) >= 1 else { return }
-        preferredStatusWidth = width
-        invalidateIntrinsicContentSize()
-        preferredWidthDidChange?(width)
-    }
-
     private struct RowLayout {
         let groupX: CGFloat
         let labelWidth: CGFloat
@@ -416,6 +336,88 @@ public final class StatusBarView: NSView {
 }
 
 private extension StatusBarView {
+    private struct WidthMetrics {
+        let label: CGFloat
+        let value: CGFloat
+        let icon: CGFloat
+        let ring: CGFloat
+        let bar: CGFloat
+    }
+
+    private func statusBarDataColor() -> NSColor {
+        switch settings?.statusBarDataColorMode ?? .auto {
+        case .auto:
+            return automaticStatusBarDataColor()
+        case .light:
+            return .white
+        case .dark:
+            return .black
+        }
+    }
+
+    private func automaticStatusBarDataColor() -> NSColor {
+        let appearance = window?.effectiveAppearance ?? effectiveAppearance
+        let match = appearance.bestMatch(from: [.darkAqua, .aqua])
+        return match == .darkAqua ? .white : .black
+    }
+
+    private func statusIconSize(in bounds: NSRect) -> NSSize {
+        let height = min(bounds.height - 7, CGFloat(17))
+        return NSSize(width: ceil(height * Self.zenmuxIconAspectRatio), height: height)
+    }
+
+    private func statusRingSize(in bounds: NSRect) -> NSSize {
+        let size = min(bounds.height - 4, CGFloat(22))
+        return NSSize(width: size, height: size)
+    }
+
+    private func statusBarProgressSize(in bounds: NSRect) -> NSSize {
+        NSSize(width: 28, height: min(bounds.height - 8, CGFloat(18)))
+    }
+
+    private func preferredWidth(
+        for style: StatusBarPresentationStyle,
+        metrics: WidthMetrics
+    ) -> CGFloat {
+        let contentWidth: CGFloat
+        switch style {
+        case .labelsAndPercentage:
+            contentWidth = metrics.label + 2 + metrics.value
+        case .iconAndPercentage:
+            contentWidth = metrics.icon + 4 + metrics.value
+        case .doubleRingAndPercentage:
+            contentWidth = metrics.ring + 4 + metrics.value
+        case .doubleBarAndPercentage:
+            contentWidth = metrics.bar + 4 + metrics.value
+        case .doubleRing:
+            contentWidth = metrics.ring
+        case .doubleBar:
+            contentWidth = metrics.bar
+        case .percentageOnly:
+            contentWidth = metrics.value
+        case .iconOnly:
+            contentWidth = metrics.icon
+        }
+        let padding: CGFloat
+        let minimumWidth: CGFloat
+        switch style {
+        case .doubleRing, .doubleBar, .percentageOnly, .iconOnly:
+            padding = Self.compactHorizontalContentPadding
+            minimumWidth = Self.compactMinimumStatusWidth
+        default:
+            padding = Self.horizontalContentPadding
+            minimumWidth = Self.minimumStatusWidth
+        }
+        return max(minimumWidth, ceil(contentWidth + padding))
+    }
+
+    private func updatePreferredStatusWidth(_ width: CGFloat) {
+        guard abs(width - preferredStatusWidth) >= 1 else { return }
+        preferredStatusWidth = width
+        invalidateIntrinsicContentSize()
+        preferredWidthDidChange?(width)
+    }
+
     private func drawRow(label: String, value: String, layout: RowLayout, color: NSColor) {
         drawText(
             label,

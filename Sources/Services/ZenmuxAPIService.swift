@@ -8,7 +8,7 @@ public final class ZenmuxAPIService: ObservableObject {
     @Published public private(set) var isPaused: Bool = false
     @Published public private(set) var isRefreshing: Bool = false
 
-    private let apiClient: ZenmuxAPIClient
+    private var apiClient: ZenmuxAPIClient
     private var refreshTask: Task<Void, Never>?
     private var inFlightRefreshTask: Task<ZenmuxSubscriptionData, Error>?
     private var requestSequence: UInt64 = 0
@@ -25,7 +25,14 @@ public final class ZenmuxAPIService: ObservableObject {
         self.apiClient = apiClient
     }
 
+    public func updateProxyConfiguration(_ config: ProxyConfiguration?) {
+        apiClient.invalidate()
+        apiClient = ZenmuxAPIClient(proxyConfig: config)
+        AppLog.settings.info("Proxy configuration updated: mode=\(config?.mode.rawValue ?? "none")")
+    }
+
     deinit {
+        apiClient.invalidate()
         refreshTask?.cancel()
         inFlightRefreshTask?.cancel()
     }

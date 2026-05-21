@@ -6,7 +6,7 @@ func zenmuxAppIcon() -> NSImage {
         return image
     }
     if let resourceURL = Bundle.main.url(forResource: "AppIcon", withExtension: "icns"),
-       let image = NSImage(contentsOf: resourceURL) {
+        let image = NSImage(contentsOf: resourceURL) {
         return image
     }
     return NSWorkspace.shared.icon(forFile: Bundle.main.bundlePath)

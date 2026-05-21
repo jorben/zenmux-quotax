@@ -9,10 +9,95 @@ extension URLSession: URLSessionDataFetching {}
 public struct ZenmuxAPIClient: Sendable {
     private let session: URLSessionDataFetching
     private let decoder: JSONDecoder
+    /// Non-nil only when this client owns the URLSession (created via `init(proxyConfig:)`);
+    /// used to invalidate the session on replacement, preventing delegate/resource leaks.
+    private let managedSession: URLSession?
 
     public init(session: URLSessionDataFetching = URLSession.shared, decoder: JSONDecoder = JSONDecoder()) {
         self.session = session
         self.decoder = decoder
+        self.managedSession = nil
+    }
+
+    public init(proxyConfig: ProxyConfiguration?, decoder: JSONDecoder = JSONDecoder()) {
+        let urlSession = Self.createSession(proxyConfig: proxyConfig)
+        self.session = urlSession
+        self.decoder = decoder
+        self.managedSession = urlSession
+    }
+
+    /// Invalidate the underlying URLSession created by `init(proxyConfig:)`.
+    /// Call this before replacing the client to avoid leaking the session and its delegate.
+    /// No-op for clients initialized with an injected session.
+    public func invalidate() {
+        managedSession?.invalidateAndCancel()
+    }
+
+    private static func createSession(proxyConfig: ProxyConfiguration?) -> URLSession {
+        guard let config = proxyConfig else {
+            // No proxy config specified — explicitly disable system proxy to avoid
+            // inheriting system proxy settings from the ephemeral configuration.
+            let sessionConfig = URLSessionConfiguration.ephemeral
+            sessionConfig.connectionProxyDictionary = [:]
+            return URLSession(configuration: sessionConfig)
+        }
+
+        switch config.mode {
+        case .none:
+            let config = URLSessionConfiguration.ephemeral
+            config.connectionProxyDictionary = [:]
+            return URLSession(configuration: config)
+
+        case .system:
+            return URLSession(configuration: .default)
+
+        case .manual:
+            let sessionConfig = URLSessionConfiguration.ephemeral
+            sessionConfig.connectionProxyDictionary = buildProxyDictionary(config: config)
+            let delegate = ProxyAuthenticationDelegate(
+                username: config.username?.nilIfEmpty,
+                password: config.password?.nilIfEmpty
+            )
+            return URLSession(configuration: sessionConfig, delegate: delegate, delegateQueue: nil)
+        }
+    }
+
+    private static func buildProxyDictionary(config: ProxyConfiguration) -> [AnyHashable: Any] {
+        guard let host = config.host?.nilIfEmpty, let port = config.port, (1...65535).contains(port) else {
+            return [:]
+        }
+
+        var proxy: [AnyHashable: Any] = [:]
+        let portNumber = NSNumber(value: port)
+
+        switch config.type {
+        case .http?:
+            proxy[kCFNetworkProxiesHTTPEnable] = true
+            proxy[kCFNetworkProxiesHTTPProxy] = host
+            proxy[kCFNetworkProxiesHTTPPort] = portNumber
+        case .https?:
+            proxy[kCFNetworkProxiesHTTPSEnable] = true
+            proxy[kCFNetworkProxiesHTTPSProxy] = host
+            proxy[kCFNetworkProxiesHTTPSPort] = portNumber
+        case .socks5?:
+            proxy[kCFNetworkProxiesSOCKSEnable] = true
+            proxy[kCFNetworkProxiesSOCKSProxy] = host
+            proxy[kCFNetworkProxiesSOCKSPort] = portNumber
+            // Explicitly request SOCKS5; default version varies by platform.
+            proxy[kCFStreamPropertySOCKSVersion] = kCFStreamSocketSOCKSVersion5
+            // SOCKS credentials must be placed in the proxy dictionary.
+            // URLSessionDelegate-based challenges are not reliably delivered for SOCKS5.
+            if let username = config.username?.nilIfEmpty {
+                proxy[kCFStreamPropertySOCKSUser] = username
+                if let password = config.password {
+                    proxy[kCFStreamPropertySOCKSPassword] = password
+                }
+            }
+        case nil:
+            return [:]
+        }
+
+        return proxy
     }
 
     public func fetchSubscription(apiKey: String) async throws -> ZenmuxSubscriptionData {
@@ -35,59 +120,86 @@ public struct ZenmuxAPIClient: Sendable {
 
         do {
             let (data, response) = try await session.data(for: request)
-            let duration = Date().timeIntervalSince(startedAt)
-            guard let httpResponse = response as? HTTPURLResponse else {
-                AppLog.network.error("Subscription request returned a non-HTTP response after \(duration)s")
-                throw ZenmuxAPIError(.networkError, message: "Invalid HTTP response", diagnosticMessage: "Response type: \(String(describing: type(of: response)))")
-            }
-
-            AppLog.network.debug("Subscription request finished with status \(httpResponse.statusCode) in \(duration)s")
-            guard (200..<300).contains(httpResponse.statusCode) else {
-                let body = Self.responseSnippet(from: data) ?? HTTPURLResponse.localizedString(forStatusCode: httpResponse.statusCode)
-                AppLog.network.error("Subscription request failed with HTTP \(httpResponse.statusCode); body snippet length \(body.count)")
-                throw ZenmuxAPIError(.httpError, statusCode: httpResponse.statusCode, message: body, diagnosticMessage: "HTTP \(httpResponse.statusCode), responseBodySnippet: \(body)")
-            }
-
-            do {
-                let decodedResponse = try decoder.decode(ZenmuxSubscriptionResponse.self, from: data)
-                if decodedResponse.success == false {
-                    let message = decodedResponse.message ?? "Zenmux API returned success=false"
-                    AppLog.network.error("Subscription API returned success=false with status \(decodedResponse.statusCode ?? -1)")
-                    throw ZenmuxAPIError(.apiError, statusCode: decodedResponse.statusCode, message: message, diagnosticMessage: "Envelope success=false")
-                }
-                guard let subscriptionData = decodedResponse.data else {
-                    AppLog.decode.error("Subscription response decoded without data")
-                    throw ZenmuxAPIError(
-                        .decodeError,
-                        message: "Subscription response did not include data.",
-                        diagnosticMessage: "Decoded response had nil data; body snippet: \(Self.responseSnippet(from: data) ?? "<unavailable>")"
-                    )
-                }
-                AppLog.network.info("Subscription request decoded successfully in \(duration)s")
-                return subscriptionData
-            } catch let apiError as ZenmuxAPIError {
-                throw apiError
-            } catch let decodingError as DecodingError {
-                let diagnostic = ZenmuxAPIError.diagnosticDescription(for: decodingError)
-                AppLog.decode.error("Subscription response decode failed: \(diagnostic)")
-                throw ZenmuxAPIError(.decodeError, message: diagnostic, diagnosticMessage: "Body snippet: \(Self.responseSnippet(from: data) ?? "<unavailable>")")
-            }
+            let httpResponse = try validateHTTPResponse(response, duration: Date().timeIntervalSince(startedAt))
+            try validateStatusCode(httpResponse, data: data, duration: Date().timeIntervalSince(startedAt))
+            return try decodeSubscriptionResponse(from: data, duration: Date().timeIntervalSince(startedAt))
+        } catch let error as ZenmuxAPIError {
+            throw error
         } catch is CancellationError {
             AppLog.network.debug("Subscription request cancelled")
             throw CancellationError()
-        } catch let apiError as ZenmuxAPIError {
-            throw apiError
         } catch let urlError as URLError {
-            if urlError.code == .cancelled {
-                AppLog.network.debug("Subscription request URL cancelled: \(urlError.code.rawValue) \(urlError.localizedDescription)")
-                throw CancellationError()
-            }
-            AppLog.network.error("Subscription request URL error: \(urlError.code.rawValue) \(urlError.localizedDescription)")
-            throw ZenmuxAPIError(.networkError, message: urlError.localizedDescription, diagnosticMessage: "URLError code: \(urlError.code.rawValue)")
+            throw wrapURLError(urlError)
         } catch {
             AppLog.network.error("Subscription request failed unexpectedly: \(error.localizedDescription)")
             throw ZenmuxAPIError(.networkError, message: error.localizedDescription, diagnosticMessage: String(describing: error))
         }
+    }
+
+    private func validateHTTPResponse(_ response: URLResponse, duration: TimeInterval) throws -> HTTPURLResponse {
+        guard let httpResponse = response as? HTTPURLResponse else {
+            AppLog.network.error("Subscription request returned a non-HTTP response after \(duration)s")
+            throw ZenmuxAPIError(
+                .networkError,
+                message: "Invalid HTTP response",
+                diagnosticMessage: "Response type: \(String(describing: type(of: response)))"
+            )
+        }
+        AppLog.network.debug("Subscription request finished with status \(httpResponse.statusCode) in \(duration)s")
+        return httpResponse
+    }
+
+    private func validateStatusCode(_ httpResponse: HTTPURLResponse, data: Data, duration: TimeInterval) throws {
+        guard (200..<300).contains(httpResponse.statusCode) else {
+            let body = Self.responseSnippet(from: data) ?? HTTPURLResponse.localizedString(forStatusCode: httpResponse.statusCode)
+            AppLog.network.error("Subscription request failed with HTTP \(httpResponse.statusCode); body snippet length \(body.count)")
+            throw ZenmuxAPIError(
+                .httpError,
+                statusCode: httpResponse.statusCode,
+                message: body,
+                diagnosticMessage: "HTTP \(httpResponse.statusCode), responseBodySnippet: \(body)"
+            )
+        }
+    }
+
+    private func decodeSubscriptionResponse(from data: Data, duration: TimeInterval) throws -> ZenmuxSubscriptionData {
+        do {
+            let decodedResponse = try decoder.decode(ZenmuxSubscriptionResponse.self, from: data)
+            if decodedResponse.success == false {
+                let message = decodedResponse.message ?? "Zenmux API returned success=false"
+                AppLog.network.error("Subscription API returned success=false with status \(decodedResponse.statusCode ?? -1)")
+                throw ZenmuxAPIError(.apiError, statusCode: decodedResponse.statusCode, message: message, diagnosticMessage: "Envelope success=false")
+            }
+            guard let subscriptionData = decodedResponse.data else {
+                AppLog.decode.error("Subscription response decoded without data")
+                throw ZenmuxAPIError(
+                    .decodeError,
+                    message: "Subscription response did not include data.",
+                    diagnosticMessage: "Decoded response had nil data; body snippet: \(Self.responseSnippet(from: data) ?? "<unavailable>")"
+                )
+            }
+            AppLog.network.info("Subscription request decoded successfully in \(duration)s")
+            return subscriptionData
+        } catch let apiError as ZenmuxAPIError {
+            throw apiError
+        } catch let decodingError as DecodingError {
+            let diagnostic = ZenmuxAPIError.diagnosticDescription(for: decodingError)
+            AppLog.decode.error("Subscription response decode failed: \(diagnostic)")
+            throw ZenmuxAPIError(
+                .decodeError,
+                message: diagnostic,
+                diagnosticMessage: "Body snippet: \(Self.responseSnippet(from: data) ?? "<unavailable>")"
+            )
+        }
+    }
+
+    private func wrapURLError(_ urlError: URLError) -> Error {
+        if urlError.code == .cancelled {
+            AppLog.network.debug("Subscription request URL cancelled: \(urlError.code.rawValue) \(urlError.localizedDescription)")
+            return CancellationError()
+        }
+        AppLog.network.error("Subscription request URL error: \(urlError.code.rawValue) \(urlError.localizedDescription)")
+        return ZenmuxAPIError(.networkError, message: urlError.localizedDescription, diagnosticMessage: "URLError code: \(urlError.code.rawValue)")
     }
 
     private static func responseSnippet(from data: Data) -> String? {
@@ -98,5 +210,46 @@ public struct ZenmuxAPIClient: Sendable {
         }
         let hexSnippet = prefix.map { String(format: "%02x", $0) }.joined(separator: " ")
         return "<non-UTF8 body hex: \(hexSnippet)>"
+    }
+}
+
+private final class ProxyAuthenticationDelegate: NSObject, URLSessionDelegate, @unchecked Sendable {
+    private let username: String?
+    private let password: String?
+
+    init(username: String?, password: String?) {
+        self.username = username
+        self.password = password
+        super.init()
+    }
+
+    func urlSession(
+        _ session: URLSession,
+        didReceive challenge: URLAuthenticationChallenge,
+        completionHandler: @escaping (URLSession.AuthChallengeDisposition, URLCredential?) -> Void
+    ) {
+
+        guard
+            challenge.protectionSpace.authenticationMethod == "NSURLAuthenticationMethodHTTPProxy"
+                || challenge.protectionSpace.authenticationMethod == "NSURLAuthenticationMethodSOCKS",
+            let username, let password, !username.isEmpty
+        else {
+            completionHandler(.performDefaultHandling, nil)
+            return
+        }
+
+        if challenge.previousFailureCount > 0 {
+            completionHandler(.cancelAuthenticationChallenge, nil)
+            return
+        }
+
+        let credential = URLCredential(user: username, password: password, persistence: .forSession)
+        completionHandler(.useCredential, credential)
+    }
+}
+
+private extension String {
+    var nilIfEmpty: String? {
+        isEmpty ? nil : self
     }
 }

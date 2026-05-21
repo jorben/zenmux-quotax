@@ -1,72 +1,6 @@
 import AppKit
 import SwiftUI
 
-struct PanelTimeFormatter {
-    private static func outputFormatter(timeZone: TimeZone) -> DateFormatter {
-        let formatter = DateFormatter()
-        formatter.locale = Locale(identifier: "en_US_POSIX")
-        formatter.timeZone = timeZone
-        formatter.dateFormat = "yyyy-MM-dd HH:mm:ss"
-        return formatter
-    }
-
-    private static func isoFormatter(formatOptions: ISO8601DateFormatter.Options) -> ISO8601DateFormatter {
-        let formatter = ISO8601DateFormatter()
-        formatter.formatOptions = formatOptions
-        return formatter
-    }
-
-    static func format(date: Date, timeZone: TimeZone) -> String {
-        outputFormatter(timeZone: timeZone).string(from: date)
-    }
-
-    static func format(isoString: String, timeZone: TimeZone) -> String {
-        let date =
-            isoFormatter(formatOptions: [.withInternetDateTime, .withFractionalSeconds]).date(from: isoString)
-            ?? isoFormatter(formatOptions: [.withInternetDateTime]).date(from: isoString)
-        guard let date else { return isoString }
-        return format(date: date, timeZone: timeZone)
-    }
-
-    static func relativeFutureText(isoString: String, timeZone: TimeZone, now: Date = Date()) -> String {
-        let date =
-            isoFormatter(formatOptions: [.withInternetDateTime, .withFractionalSeconds]).date(from: isoString)
-            ?? isoFormatter(formatOptions: [.withInternetDateTime]).date(from: isoString)
-        guard let date else { return isoString }
-
-        let remaining = Int(date.timeIntervalSince(now))
-        guard remaining > 0, remaining < 24 * 60 * 60 else {
-            return format(date: date, timeZone: timeZone)
-        }
-
-        let minutes = max(1, Int(ceil(Double(remaining) / 60.0)))
-        if minutes < 60 { return "in \(minutes) \(unit("minute", count: minutes))" }
-
-        let hours = minutes / 60
-        let remainderMinutes = minutes % 60
-        if hours < 12, remainderMinutes > 0 {
-            return "in \(hours) \(unit("hour", count: hours)) \(remainderMinutes) \(unit("minute", count: remainderMinutes))"
-        }
-
-        return "in \(hours) \(unit("hour", count: hours))"
-    }
-
-    private static func unit(_ singular: String, count: Int) -> String {
-        count == 1 ? singular : "\(singular)s"
-    }
-
-    static func relativeUpdatedText(since date: Date, now: Date = Date()) -> String {
-        let elapsed = max(0, Int(now.timeIntervalSince(date)))
-        if elapsed < 60 { return "Updated \(elapsed) seconds ago" }
-        let minutes = elapsed / 60
-        if minutes < 60 { return "Updated \(minutes) minutes ago" }
-        let hours = minutes / 60
-        if hours < 24 { return "Updated \(hours) hours ago" }
-        let days = hours / 24
-        return "Updated \(days) days ago"
-    }
-}
-
 struct MenuHeaderView: View {
     @ObservedObject var apiService: ZenmuxAPIService
     @ObservedObject var settings: SettingsManager
@@ -634,6 +568,21 @@ struct SettingsView: View {
     let onSaveAPIKey: (String) -> Void
     @State private var apiKeyInput: String = ""
     @State private var showKeySaved = false
+    @State private var selectedTab: SettingsTab = .connection
+
+    private enum SettingsTab: String, CaseIterable {
+        case connection
+        case display
+        case general
+
+        var title: String {
+            switch self {
+            case .connection: return "Connection"
+            case .display: return "Display"
+            case .general: return "General"
+            }
+        }
+    }
 
     private static let managementPortalURL = URL(string: AppConstants.API.managementPortalURLString)
 
@@ -646,18 +595,43 @@ struct SettingsView: View {
 
             Divider()
 
-            ScrollView {
-                VStack(alignment: .leading, spacing: 16) {
-                    apiKeySection
-                    behaviorSection
-                    displaySection
-                    diagnosticsSection
+            tabPicker
+                .padding(.horizontal, 24)
+                .padding(.vertical, 12)
+
+            Divider()
+
+            if selectedTab == .connection {
+                ScrollView {
+                    VStack(alignment: .leading, spacing: 16) {
+                        apiKeySection
+                        proxySection
+                    }
+                    .padding(20)
+                    .frame(maxWidth: .infinity, alignment: .topLeading)
                 }
-                .padding(20)
-                .frame(maxWidth: .infinity, alignment: .topLeading)
+            } else if selectedTab == .display {
+                ScrollView {
+                    VStack(alignment: .leading, spacing: 16) {
+                        themeSection
+                        statusBarSection
+                    }
+                    .padding(20)
+                    .frame(maxWidth: .infinity, alignment: .topLeading)
+                }
+            } else {
+                ScrollView {
+                    VStack(alignment: .leading, spacing: 16) {
+                        behaviorSection
+                        timezoneSection
+                        diagnosticsSection
+                    }
+                    .padding(20)
+                    .frame(maxWidth: .infinity, alignment: .topLeading)
+                }
             }
         }
-        .frame(width: 560, height: 640)
+        .frame(width: 560, height: 600)
         .background {
             LinearGradient(
                 colors: [
@@ -701,6 +675,16 @@ struct SettingsView: View {
             statusPill
                 .layoutPriority(1)
         }
+    }
+
+    private var tabPicker: some View {
+        Picker("Settings tab", selection: $selectedTab) {
+            ForEach(SettingsTab.allCases, id: \.self) { tab in
+                Text(tab.title).tag(tab)
+            }
+        }
+        .pickerStyle(.segmented)
+        .labelsHidden()
     }
 
     private var statusPill: some View {
@@ -810,22 +794,39 @@ struct SettingsView: View {
         }
     }
 
-    private var displaySection: some View {
-        settingsCard(icon: "menubar.rectangle", title: "Display", subtitle: "Decide how theme, quota, and time are shown in Quotax.") {
+    private var themeSection: some View {
+        settingsCard(icon: "paintbrush", title: "Theme", subtitle: "Choose how the Quotax interface appears.") {
+            settingRow(
+                title: "Appearance",
+                subtitle: "Choose Auto to follow your macOS appearance."
+            ) {
+                Picker("Theme", selection: $settings.appearanceMode) {
+                    ForEach(AppearanceMode.allCases) { mode in
+                        Text(mode.title).tag(mode)
+                    }
+                }
+                .labelsHidden()
+                .accessibilityLabel("Theme")
+                .pickerStyle(.segmented)
+            }
+        }
+    }
+
+    private var statusBarSection: some View {
+        settingsCard(icon: "menubar.rectangle", title: "Status bar", subtitle: "Customize the menu bar display.") {
             VStack(spacing: 0) {
                 settingRow(
-                    title: "Theme",
-                    subtitle: "Choose Auto to follow your macOS appearance."
+                    title: "Status bar mode",
+                    subtitle: "Use auto, light, or dark content in the menu bar status item."
                 ) {
-                    Picker("Theme", selection: $settings.appearanceMode) {
-                        ForEach(AppearanceMode.allCases) { mode in
+                    Picker("Status bar mode", selection: $settings.statusBarDataColorMode) {
+                        ForEach(StatusBarDataColorMode.allCases) { mode in
                             Text(mode.title).tag(mode)
                         }
                     }
                     .labelsHidden()
-                    .accessibilityLabel("Theme")
+                    .accessibilityLabel("Status bar mode")
                     .pickerStyle(.segmented)
-                    .frame(width: 220)
                 }
 
                 rowDivider
@@ -842,45 +843,11 @@ struct SettingsView: View {
                     .labelsHidden()
                     .accessibilityLabel("Status bar quota")
                     .pickerStyle(.segmented)
-                    .frame(width: 250)
                 }
 
                 rowDivider
 
                 statusBarStyleSection
-
-                rowDivider
-
-                settingRow(
-                    title: "Status bar mode",
-                    subtitle: "Use auto, light, or dark content in the menu bar status item."
-                ) {
-                    Picker("Status bar mode", selection: $settings.statusBarDataColorMode) {
-                        ForEach(StatusBarDataColorMode.allCases) { mode in
-                            Text(mode.title).tag(mode)
-                        }
-                    }
-                    .labelsHidden()
-                    .accessibilityLabel("Status bar mode")
-                    .pickerStyle(.segmented)
-                    .frame(width: 220)
-                }
-
-                rowDivider
-
-                settingRow(
-                    title: "Time zone",
-                    subtitle: "Used for expiration and quota reset times."
-                ) {
-                    Picker("Time zone", selection: $settings.timeZoneIdentifier) {
-                        ForEach(SettingsManager.preferredTimeZoneIdentifiers, id: \.self) { identifier in
-                            Text(identifier).tag(identifier)
-                        }
-                    }
-                    .labelsHidden()
-                    .accessibilityLabel("Time zone")
-                    .frame(width: 320)
-                }
             }
         }
     }
@@ -959,6 +926,109 @@ struct SettingsView: View {
         .contentShape(RoundedRectangle(cornerRadius: 14, style: .continuous))
     }
 
+    private var timezoneSection: some View {
+        settingsCard(
+            icon: "globe",
+            title: "Time zone",
+            subtitle: "Used for expiration and quota reset times.",
+            headerAction: {
+                Picker("Time zone", selection: $settings.timeZoneIdentifier) {
+                    ForEach(SettingsManager.utcOffsetOptions, id: \.self) { hours in
+                        Text(SettingsManager.utcOffsetTitle(hours))
+                            .tag(SettingsManager.utcOffsetIdentifier(hours))
+                    }
+                }
+                .labelsHidden()
+                .accessibilityLabel("Time zone")
+            },
+            content: {
+                EmptyView()
+            }
+        )
+    }
+
+    private var proxySection: some View {
+        settingsCard(icon: "network", title: "Proxy", subtitle: "Route API requests through a proxy server.") {
+            VStack(spacing: 0) {
+                settingRow(
+                    title: "Proxy mode",
+                    subtitle: "Choose how API requests reach ZenMux servers."
+                ) {
+                    Picker("Proxy mode", selection: $settings.proxyMode) {
+                        ForEach(ProxyMode.allCases) { mode in
+                            Text(mode.title).tag(mode)
+                        }
+                    }
+                    .labelsHidden()
+                    .accessibilityLabel("Proxy mode")
+                    .pickerStyle(.segmented)
+                }
+
+                if settings.proxyMode == .manual {
+                    rowDivider
+
+                    settingRow(
+                        title: "Proxy type",
+                        subtitle: "Select the protocol for your proxy server."
+                    ) {
+                        Picker("Proxy type", selection: $settings.proxyType) {
+                            ForEach(ProxyType.allCases) { type in
+                                Text(type.title).tag(type)
+                            }
+                        }
+                        .labelsHidden()
+                        .accessibilityLabel("Proxy type")
+                        .pickerStyle(.segmented)
+                    }
+
+                    rowDivider
+
+                    settingRow(
+                        title: "Host",
+                        subtitle: "Proxy server address (IP or hostname)."
+                    ) {
+                        TextField("127.0.0.1", text: $settings.proxyHost)
+                            .textFieldStyle(.roundedBorder)
+                            .frame(width: 180)
+                    }
+
+                    rowDivider
+
+                    settingRow(
+                        title: "Port",
+                        subtitle: "Proxy server port (1–65535)."
+                    ) {
+                        TextField("1080", value: $settings.proxyPort, format: .number.grouping(.never))
+                            .textFieldStyle(.roundedBorder)
+                            .frame(width: 100)
+                    }
+
+                    rowDivider
+
+                    settingRow(
+                        title: "Username",
+                        subtitle: "Optional proxy authentication username."
+                    ) {
+                        TextField("username", text: $settings.proxyUsername)
+                            .textFieldStyle(.roundedBorder)
+                            .frame(width: 180)
+                    }
+
+                    rowDivider
+
+                    settingRow(
+                        title: "Password",
+                        subtitle: "Optional proxy authentication password."
+                    ) {
+                        SecureField("password", text: $settings.proxyPassword)
+                            .textFieldStyle(.roundedBorder)
+                            .frame(width: 180)
+                    }
+                }
+            }
+        }
+    }
+
     private var diagnosticsSection: some View {
         settingsCard(icon: "doc.text.magnifyingglass", title: "Diagnostics", subtitle: "Write local logs for troubleshooting unexpected exits.") {
             VStack(spacing: 0) {
@@ -974,7 +1044,6 @@ struct SettingsView: View {
                     .labelsHidden()
                     .accessibilityLabel("Minimum log level")
                     .pickerStyle(.segmented)
-                    .frame(width: 260)
                 }
 
                 rowDivider
@@ -1008,7 +1077,7 @@ struct SettingsView: View {
     }
 
     private func settingRow<Control: View>(title: String, subtitle: String, @ViewBuilder control: () -> Control) -> some View {
-        HStack(alignment: .center, spacing: 16) {
+        HStack(alignment: .center, spacing: 0) {
             VStack(alignment: .leading, spacing: 3) {
                 Text(title)
                     .font(.subheadline)
@@ -1020,14 +1089,26 @@ struct SettingsView: View {
             }
             .layoutPriority(1)
 
-            Spacer(minLength: 12)
+            Spacer(minLength: 16)
 
             control()
         }
-        .frame(maxWidth: .infinity, alignment: .leading)
+        .frame(maxWidth: .infinity)
+    }
+}
+
+private extension SettingsView {
+    private func settingsCard<Content: View>(icon: String, title: String, subtitle: String, @ViewBuilder content: () -> Content) -> some View {
+        settingsCard(icon: icon, title: title, subtitle: subtitle, headerAction: { EmptyView() }, content: content)
     }
 
-    private func settingsCard<Content: View>(icon: String, title: String, subtitle: String, @ViewBuilder content: () -> Content) -> some View {
+    private func settingsCard<Content: View, HeaderAction: View>(
+        icon: String,
+        title: String,
+        subtitle: String,
+        @ViewBuilder headerAction: () -> HeaderAction,
+        @ViewBuilder content: () -> Content
+    ) -> some View {
         VStack(alignment: .leading, spacing: 14) {
             HStack(alignment: .top, spacing: 12) {
                 Image(systemName: icon)
@@ -1048,7 +1129,9 @@ struct SettingsView: View {
                         .fixedSize(horizontal: false, vertical: true)
                 }
 
-                Spacer(minLength: 0)
+                Spacer(minLength: 12)
+
+                headerAction()
             }
 
             content()

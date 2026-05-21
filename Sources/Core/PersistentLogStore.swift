@@ -69,7 +69,14 @@ public final class PersistentLogStore {
         )
     }
 
-    public func write(level: AppLogLevel, category: String, message: () -> String, file: StaticString = #fileID, function: StaticString = #function, line: UInt = #line) {
+    public func write(
+        level: AppLogLevel,
+        category: String,
+        message: () -> String,
+        file: StaticString = #fileID,
+        function: StaticString = #function,
+        line: UInt = #line
+    ) {
         lock.lock()
         defer { lock.unlock() }
 
@@ -233,7 +240,10 @@ public final class PersistentLogStore {
                 try prepareLogFileIfNeeded()
             }
             let sourceText = source.map { " [source=\(sanitize($0))]" } ?? ""
-            let line = "\(timestamp()) [\(level.label)] [\(category)] [session=\(sessionID)] [pid=\(ProcessInfo.processInfo.processIdentifier)]\(sourceText) \(sanitize(message))\n"
+            let line =
+                "\(timestamp()) [\(level.label)] [\(category)]"
+                + " [session=\(sessionID)] [pid=\(ProcessInfo.processInfo.processIdentifier)]"
+                + "\(sourceText) \(sanitize(message))\n"
             guard let data = line.data(using: .utf8) else { return }
             if shouldRotateBeforeWriting(entrySize: UInt64(data.count)) {
                 closeFileLocked()
@@ -287,7 +297,9 @@ public final class PersistentLogStore {
             reportEmergencyLogFailure("Failed to write session state", error: error)
         }
     }
+}
 
+private extension PersistentLogStore {
     private func readSessionState() -> SessionState? {
         guard let data = try? Data(contentsOf: sessionStateURL) else { return nil }
         return try? JSONDecoder().decode(SessionState.self, from: data)

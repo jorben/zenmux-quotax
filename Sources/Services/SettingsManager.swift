@@ -73,6 +73,61 @@ public enum StatusBarPresentationStyle: String, CaseIterable, Identifiable {
     }
 }
 
+public enum ProxyMode: String, CaseIterable, Identifiable, Sendable {
+    case none
+    case system
+    case manual
+
+    public var id: String { rawValue }
+
+    public var title: String {
+        switch self {
+        case .none: return "None"
+        case .system: return "System"
+        case .manual: return "Manual"
+        }
+    }
+}
+
+public enum ProxyType: String, CaseIterable, Identifiable, Sendable {
+    case http
+    case https
+    case socks5
+
+    public var id: String { rawValue }
+
+    public var title: String {
+        switch self {
+        case .http: return "HTTP"
+        case .https: return "HTTPS"
+        case .socks5: return "SOCKS5"
+        }
+    }
+}
+
+public struct ProxyConfiguration: Sendable {
+    public let mode: ProxyMode
+    public let type: ProxyType?
+    public let host: String?
+    public let port: Int?
+    public let username: String?
+    public let password: String?
+
+    public static func isEqual(_ lhs: ProxyConfiguration?, _ rhs: ProxyConfiguration?) -> Bool {
+        switch (lhs, rhs) {
+        case (.none, .none): return true
+        case (.some(let lhs), .some(let rhs)):
+            return lhs.mode == rhs.mode
+                && lhs.type == rhs.type
+                && lhs.host == rhs.host
+                && lhs.port == rhs.port
+                && lhs.username == rhs.username
+                && lhs.password == rhs.password
+        default: return false
+        }
+    }
+}
+
 @MainActor
 public final class SettingsManager: ObservableObject {
     public static let shared = SettingsManager()
@@ -88,9 +143,33 @@ public final class SettingsManager: ObservableObject {
         static let timeZoneIdentifier = "timeZoneIdentifier"
         static let launchAtLogin = "launchAtLogin"
         static let logMinimumLevel = "logMinimumLevel"
+        static let proxyMode = "proxy_mode"
+        static let proxyType = "proxy_type"
+        static let proxyHost = "proxy_host"
+        static let proxyPort = "proxy_port"
+        static let proxyUsername = "proxy_username"
+        static let proxyPassword = "proxy_password"
     }
 
-    public static let preferredTimeZoneIdentifiers = TimeZone.knownTimeZoneIdentifiers.sorted()
+    public static let utcOffsetOptions: [Int] = Array(-12...14)
+
+    public static func utcOffsetTitle(_ hours: Int) -> String {
+        if hours == 0 { return "UTC" }
+        let sign = hours > 0 ? "+" : ""
+        return "UTC\(sign)\(hours)"
+    }
+
+    public static func utcOffsetIdentifier(_ hours: Int) -> String {
+        "UTC\(hours >= 0 ? "+" : "")\(hours)"
+    }
+
+    public static func parseUTCOffsetHours(_ identifier: String) -> Int? {
+        guard identifier.hasPrefix("UTC") else { return nil }
+        let remainder = identifier.dropFirst(3)
+        // "UTC" with no offset suffix means UTC+0.
+        if remainder.isEmpty { return 0 }
+        return Int(remainder)
+    }
 
     private let defaults: UserDefaults
     private let launchAtLoginService: LaunchAtLoginService
@@ -141,6 +220,30 @@ public final class SettingsManager: ObservableObject {
         }
     }
 
+    @Published public var proxyMode: ProxyMode {
+        didSet { defaults.set(proxyMode.rawValue, forKey: Keys.proxyMode) }
+    }
+
+    @Published public var proxyType: ProxyType {
+        didSet { defaults.set(proxyType.rawValue, forKey: Keys.proxyType) }
+    }
+
+    @Published public var proxyHost: String {
+        didSet { defaults.set(proxyHost, forKey: Keys.proxyHost) }
+    }
+
+    @Published public var proxyPort: Int {
+        didSet { defaults.set(proxyPort, forKey: Keys.proxyPort) }
+    }
+
+    @Published public var proxyUsername: String {
+        didSet { defaults.set(proxyUsername, forKey: Keys.proxyUsername) }
+    }
+
+    @Published public var proxyPassword: String {
+        didSet { defaults.set(proxyPassword, forKey: Keys.proxyPassword) }
+    }
+
     @Published public private(set) var launchAtLoginError: String?
     private var isApplyingLaunchAtLoginRollback = false
 
@@ -160,10 +263,19 @@ public final class SettingsManager: ObservableObject {
         let storedAppearanceMode = defaults.string(forKey: Keys.appearanceMode) ?? AppearanceMode.system.rawValue
         self.appearanceMode = AppearanceMode(rawValue: storedAppearanceMode) ?? .system
         let storedTimeZone = defaults.string(forKey: Keys.timeZoneIdentifier) ?? TimeZone.current.identifier
-        self.timeZoneIdentifier = TimeZone(identifier: storedTimeZone)?.identifier ?? TimeZone.current.identifier
+        let resolved = Self.resolveTimeZoneIdentifier(storedTimeZone)
+        self.timeZoneIdentifier = resolved
         self.launchAtLogin = defaults.object(forKey: Keys.launchAtLogin) as? Bool ?? false
         let storedLogMinimumLevel = defaults.string(forKey: Keys.logMinimumLevel) ?? AppLogLevel.info.rawValueString
         self.logMinimumLevel = AppLogLevel(storedValue: storedLogMinimumLevel) ?? .info
+        let storedProxyMode = defaults.string(forKey: Keys.proxyMode) ?? ProxyMode.none.rawValue
+        self.proxyMode = ProxyMode(rawValue: storedProxyMode) ?? .none
+        let storedProxyType = defaults.string(forKey: Keys.proxyType) ?? ProxyType.http.rawValue
+        self.proxyType = ProxyType(rawValue: storedProxyType) ?? .http
+        self.proxyHost = defaults.string(forKey: Keys.proxyHost) ?? ""
+        self.proxyPort = defaults.integer(forKey: Keys.proxyPort)
+        self.proxyUsername = defaults.string(forKey: Keys.proxyUsername) ?? ""
+        self.proxyPassword = defaults.string(forKey: Keys.proxyPassword) ?? ""
         self.launchAtLoginError = nil
         AppLog.setMinimumLevel(logMinimumLevel)
     }
@@ -173,7 +285,39 @@ public final class SettingsManager: ObservableObject {
     }
 
     public var timeZone: TimeZone {
-        TimeZone(identifier: timeZoneIdentifier) ?? .current
+        if let hours = Self.parseUTCOffsetHours(timeZoneIdentifier) {
+            return TimeZone(secondsFromGMT: hours * 3600) ?? .current
+        }
+        return .current
+    }
+
+    public static func resolveTimeZoneIdentifier(_ identifier: String) -> String {
+        if let hours = parseUTCOffsetHours(identifier), utcOffsetOptions.contains(hours) {
+            return utcOffsetIdentifier(hours)
+        }
+        let currentOffset =
+            TimeZone(identifier: identifier)?.secondsFromGMT()
+            ?? TimeZone.current.secondsFromGMT()
+        let hoursOffset = Int(round(Double(currentOffset) / 3600.0))
+        let clamped = max(-12, min(14, hoursOffset))
+        return utcOffsetIdentifier(clamped)
+    }
+
+    public var proxyConfiguration: ProxyConfiguration? {
+        guard proxyMode != .none else { return nil }
+        if proxyMode == .manual {
+            let host = proxyHost.trimmingCharacters(in: .whitespacesAndNewlines)
+            guard !host.isEmpty, (1...65535).contains(proxyPort) else { return nil }
+            return ProxyConfiguration(
+                mode: proxyMode,
+                type: proxyType,
+                host: host,
+                port: proxyPort,
+                username: proxyUsername.trimmingCharacters(in: .whitespacesAndNewlines),
+                password: proxyPassword
+            )
+        }
+        return ProxyConfiguration(mode: proxyMode, type: nil, host: nil, port: nil, username: nil, password: nil)
     }
 
     public func refreshLaunchAtLoginStatus() {
