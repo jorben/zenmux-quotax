@@ -149,7 +149,19 @@ public final class SettingsManager: ObservableObject {
         static let proxyPassword = "proxy_password"
     }
 
-    public static let preferredTimeZoneIdentifiers = TimeZone.knownTimeZoneIdentifiers.sorted()
+    public static let preferredTimeZoneIdentifiers: [String] = {
+        let minOffset = -12 * 3600
+        let maxOffset = 14 * 3600
+        return TimeZone.knownTimeZoneIdentifiers
+            .compactMap { identifier -> (String, Int)? in
+                guard let tz = TimeZone(identifier: identifier) else { return nil }
+                let offset = tz.secondsFromGMT()
+                guard offset >= minOffset, offset <= maxOffset else { return nil }
+                return (identifier, offset)
+            }
+            .sorted { $0.1 < $1.1 }
+            .map { $0.0 }
+    }()
 
     private let defaults: UserDefaults
     private let launchAtLoginService: LaunchAtLoginService
@@ -243,7 +255,8 @@ public final class SettingsManager: ObservableObject {
         let storedAppearanceMode = defaults.string(forKey: Keys.appearanceMode) ?? AppearanceMode.system.rawValue
         self.appearanceMode = AppearanceMode(rawValue: storedAppearanceMode) ?? .system
         let storedTimeZone = defaults.string(forKey: Keys.timeZoneIdentifier) ?? TimeZone.current.identifier
-        self.timeZoneIdentifier = TimeZone(identifier: storedTimeZone)?.identifier ?? TimeZone.current.identifier
+        let resolved = Self.resolveTimeZoneIdentifier(storedTimeZone)
+        self.timeZoneIdentifier = resolved
         self.launchAtLogin = defaults.object(forKey: Keys.launchAtLogin) as? Bool ?? false
         let storedLogMinimumLevel = defaults.string(forKey: Keys.logMinimumLevel) ?? AppLogLevel.info.rawValueString
         self.logMinimumLevel = AppLogLevel(storedValue: storedLogMinimumLevel) ?? .info
@@ -265,6 +278,24 @@ public final class SettingsManager: ObservableObject {
 
     public var timeZone: TimeZone {
         TimeZone(identifier: timeZoneIdentifier) ?? .current
+    }
+
+    public static func resolveTimeZoneIdentifier(_ identifier: String) -> String {
+        if let tz = TimeZone(identifier: identifier), preferredTimeZoneIdentifiers.contains(tz.identifier) {
+            return tz.identifier
+        }
+        let targetOffset = TimeZone(identifier: identifier)?.secondsFromGMT() ?? TimeZone.current.secondsFromGMT()
+        var best: String?
+        var bestDiff = Int.max
+        for candidate in preferredTimeZoneIdentifiers {
+            guard let tz = TimeZone(identifier: candidate) else { continue }
+            let diff = abs(tz.secondsFromGMT() - targetOffset)
+            if diff < bestDiff {
+                bestDiff = diff
+                best = candidate
+            }
+        }
+        return best ?? preferredTimeZoneIdentifiers.first ?? TimeZone.current.identifier
     }
 
     public var proxyConfiguration: ProxyConfiguration? {

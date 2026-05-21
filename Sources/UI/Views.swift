@@ -679,7 +679,8 @@ struct SettingsView: View {
             } else if selectedTab == .display {
                 ScrollView {
                     VStack(alignment: .leading, spacing: 16) {
-                        displaySection
+                        themeSection
+                        statusBarSection
                     }
                     .padding(20)
                     .frame(maxWidth: .infinity, alignment: .topLeading)
@@ -859,20 +860,39 @@ struct SettingsView: View {
         }
     }
 
-    private var displaySection: some View {
-        settingsCard(icon: "menubar.rectangle", title: "Display", subtitle: "Decide how theme and quota are shown in Quotax.") {
+    private var themeSection: some View {
+        settingsCard(icon: "paintbrush", title: "Theme", subtitle: "Choose how the Quotax interface appears.") {
+            settingRow(
+                title: "Appearance",
+                subtitle: "Choose Auto to follow your macOS appearance."
+            ) {
+                Picker("Theme", selection: $settings.appearanceMode) {
+                    ForEach(AppearanceMode.allCases) { mode in
+                        Text(mode.title).tag(mode)
+                    }
+                }
+                .labelsHidden()
+                .accessibilityLabel("Theme")
+                .pickerStyle(.segmented)
+                .frame(width: 220)
+            }
+        }
+    }
+
+    private var statusBarSection: some View {
+        settingsCard(icon: "menubar.rectangle", title: "Status bar", subtitle: "Customize the menu bar display.") {
             VStack(spacing: 0) {
                 settingRow(
-                    title: "Theme",
-                    subtitle: "Choose Auto to follow your macOS appearance."
+                    title: "Status bar mode",
+                    subtitle: "Use auto, light, or dark content in the menu bar status item."
                 ) {
-                    Picker("Theme", selection: $settings.appearanceMode) {
-                        ForEach(AppearanceMode.allCases) { mode in
+                    Picker("Status bar mode", selection: $settings.statusBarDataColorMode) {
+                        ForEach(StatusBarDataColorMode.allCases) { mode in
                             Text(mode.title).tag(mode)
                         }
                     }
                     .labelsHidden()
-                    .accessibilityLabel("Theme")
+                    .accessibilityLabel("Status bar mode")
                     .pickerStyle(.segmented)
                     .frame(width: 220)
                 }
@@ -897,24 +917,6 @@ struct SettingsView: View {
                 rowDivider
 
                 statusBarStyleSection
-
-                rowDivider
-
-                settingRow(
-                    title: "Status bar mode",
-                    subtitle: "Use auto, light, or dark content in the menu bar status item."
-                ) {
-                    Picker("Status bar mode", selection: $settings.statusBarDataColorMode) {
-                        ForEach(StatusBarDataColorMode.allCases) { mode in
-                            Text(mode.title).tag(mode)
-                        }
-                    }
-                    .labelsHidden()
-                    .accessibilityLabel("Status bar mode")
-                    .pickerStyle(.segmented)
-                    .frame(width: 220)
-                }
-
             }
         }
     }
