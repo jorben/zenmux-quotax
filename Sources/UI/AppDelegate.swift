@@ -70,7 +70,17 @@ public final class AppDelegate: NSObject, NSApplicationDelegate, NSWindowDelegat
                 }
             }
         lastProxyConfig = settings.proxyConfiguration
-        apiService.updateProxyConfiguration(lastProxyConfig)
+        // At startup, guard against an invalid manual proxy configuration:
+        // if the user selected manual mode but the config is incomplete/invalid,
+        // proxyConfiguration returns nil which would route traffic directly.
+        // Keep the default no-proxy session instead and log a warning.
+        if settings.proxyMode == .manual && lastProxyConfig == nil {
+            AppLog.settings.warning(
+                "Manual proxy configuration is incomplete or invalid at startup; using direct connection until the configuration is corrected"
+            )
+        } else {
+            apiService.updateProxyConfiguration(lastProxyConfig)
+        }
     }
 
     private func applyAppearanceMode(_ mode: AppearanceMode) {

@@ -32,6 +32,7 @@ public final class ZenmuxAPIService: ObservableObject {
     }
 
     deinit {
+        apiClient.invalidate()
         refreshTask?.cancel()
         inFlightRefreshTask?.cancel()
     }

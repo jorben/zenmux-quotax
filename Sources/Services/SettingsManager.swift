@@ -165,7 +165,10 @@ public final class SettingsManager: ObservableObject {
 
     public static func parseUTCOffsetHours(_ identifier: String) -> Int? {
         guard identifier.hasPrefix("UTC") else { return nil }
-        return Int(identifier.dropFirst(3))
+        let remainder = identifier.dropFirst(3)
+        // "UTC" with no offset suffix means UTC+0.
+        if remainder.isEmpty { return 0 }
+        return Int(remainder)
     }
 
     private let defaults: UserDefaults
