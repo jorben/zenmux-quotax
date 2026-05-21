@@ -56,6 +56,10 @@ public struct ZenmuxAPIClient: Sendable {
             proxy[kCFNetworkProxiesHTTPEnable] = true
             proxy[kCFNetworkProxiesHTTPProxy] = host
             proxy[kCFNetworkProxiesHTTPPort] = portNumber
+        case .https?:
+            proxy[kCFNetworkProxiesHTTPSEnable] = true
+            proxy[kCFNetworkProxiesHTTPSProxy] = host
+            proxy[kCFNetworkProxiesHTTPSPort] = portNumber
         case .socks5?:
             proxy[kCFNetworkProxiesSOCKSEnable] = true
             proxy[kCFNetworkProxiesSOCKSProxy] = host
