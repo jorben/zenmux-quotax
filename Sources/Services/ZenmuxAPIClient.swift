@@ -15,6 +15,58 @@ public struct ZenmuxAPIClient: Sendable {
         self.decoder = decoder
     }
 
+    public init(proxyConfig: ProxyConfiguration?, decoder: JSONDecoder = JSONDecoder()) {
+        self.session = Self.createSession(proxyConfig: proxyConfig)
+        self.decoder = decoder
+    }
+
+    private static func createSession(proxyConfig: ProxyConfiguration?) -> URLSession {
+        guard let config = proxyConfig else {
+            return URLSession(configuration: .ephemeral)
+        }
+
+        switch config.mode {
+        case .none:
+            return URLSession(configuration: .ephemeral)
+
+        case .system:
+            return URLSession(configuration: .default)
+
+        case .manual:
+            let sessionConfig = URLSessionConfiguration.ephemeral
+            sessionConfig.connectionProxyDictionary = buildProxyDictionary(config: config)
+            let delegate = ProxyAuthenticationDelegate(
+                username: config.username?.nilIfEmpty,
+                password: config.password?.nilIfEmpty
+            )
+            return URLSession(configuration: sessionConfig, delegate: delegate, delegateQueue: nil)
+        }
+    }
+
+    private static func buildProxyDictionary(config: ProxyConfiguration) -> [AnyHashable: Any] {
+        guard let host = config.host?.nilIfEmpty, let port = config.port, (1...65535).contains(port) else {
+            return [:]
+        }
+
+        var proxy: [AnyHashable: Any] = [:]
+        let portNumber = NSNumber(value: port)
+
+        switch config.type {
+        case .http?:
+            proxy[kCFNetworkProxiesHTTPEnable] = true
+            proxy[kCFNetworkProxiesHTTPProxy] = host
+            proxy[kCFNetworkProxiesHTTPPort] = portNumber
+        case .socks5?:
+            proxy[kCFNetworkProxiesSOCKSEnable] = true
+            proxy[kCFNetworkProxiesSOCKSProxy] = host
+            proxy[kCFNetworkProxiesSOCKSPort] = portNumber
+        case nil:
+            return [:]
+        }
+
+        return proxy
+    }
+
     public func fetchSubscription(apiKey: String) async throws -> ZenmuxSubscriptionData {
         let key = apiKey.trimmingCharacters(in: .whitespacesAndNewlines)
         guard !key.isEmpty else {
@@ -98,5 +150,46 @@ public struct ZenmuxAPIClient: Sendable {
         }
         let hexSnippet = prefix.map { String(format: "%02x", $0) }.joined(separator: " ")
         return "<non-UTF8 body hex: \(hexSnippet)>"
+    }
+}
+
+private final class ProxyAuthenticationDelegate: NSObject, URLSessionDelegate, @unchecked Sendable {
+    private let username: String?
+    private let password: String?
+
+    init(username: String?, password: String?) {
+        self.username = username
+        self.password = password
+        super.init()
+    }
+
+    func urlSession(
+        _ session: URLSession,
+        didReceive challenge: URLAuthenticationChallenge,
+        completionHandler: @escaping (URLSession.AuthChallengeDisposition, URLCredential?) -> Void
+    ) {
+
+        guard
+            challenge.protectionSpace.authenticationMethod == "NSURLAuthenticationMethodHTTPProxy"
+                || challenge.protectionSpace.authenticationMethod == "NSURLAuthenticationMethodSOCKS",
+            let username, let password, !username.isEmpty
+        else {
+            completionHandler(.performDefaultHandling, nil)
+            return
+        }
+
+        if challenge.previousFailureCount > 0 {
+            completionHandler(.cancelAuthenticationChallenge, nil)
+            return
+        }
+
+        let credential = URLCredential(user: username, password: password, persistence: .forSession)
+        completionHandler(.useCredential, credential)
+    }
+}
+
+private extension String {
+    var nilIfEmpty: String? {
+        isEmpty ? nil : self
     }
 }

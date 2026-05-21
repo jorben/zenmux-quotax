@@ -15,6 +15,8 @@ public final class AppDelegate: NSObject, NSApplicationDelegate, NSWindowDelegat
     private let menuWidth: CGFloat = AppConstants.Menu.width
     private var menuHost: NSHostingView<MenuContentView>?
     private var appearanceCancellable: AnyCancellable?
+    private var proxyCancellable: AnyCancellable?
+    private var lastProxyConfig: ProxyConfiguration?
     private var localEventMonitor: Any?
     private var globalEventMonitor: Any?
 
@@ -28,6 +30,7 @@ public final class AppDelegate: NSObject, NSApplicationDelegate, NSWindowDelegat
         settings.refreshLaunchAtLoginStatus()
         setupApplicationMenu()
         setupStatusItem()
+        setupProxySubscription()
         apiService.startAutoRefresh(settings: settings)
         if settings.trimmedAPIKey.isEmpty {
             openSettings()
@@ -43,6 +46,21 @@ public final class AppDelegate: NSObject, NSApplicationDelegate, NSWindowDelegat
     public func applicationWillTerminate(_ notification: Notification) {
         AppLog.lifecycle.info("Application will terminate")
         AppLog.shutdown(reason: "applicationWillTerminate")
+    }
+
+    private func setupProxySubscription() {
+        proxyCancellable = settings.objectWillChange
+            .debounce(for: .milliseconds(300), scheduler: DispatchQueue.main)
+            .sink { [weak self] in
+                guard let self else { return }
+                let newConfig = self.settings.proxyConfiguration
+                if !ProxyConfiguration.isEqual(self.lastProxyConfig, newConfig) {
+                    self.lastProxyConfig = newConfig
+                    self.apiService.updateProxyConfiguration(newConfig)
+                }
+            }
+        lastProxyConfig = settings.proxyConfiguration
+        apiService.updateProxyConfiguration(lastProxyConfig)
     }
 
     private func applyAppearanceMode(_ mode: AppearanceMode) {

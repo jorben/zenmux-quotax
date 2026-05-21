@@ -634,6 +634,19 @@ struct SettingsView: View {
     let onSaveAPIKey: (String) -> Void
     @State private var apiKeyInput: String = ""
     @State private var showKeySaved = false
+    @State private var selectedTab: SettingsTab = .connection
+
+    private enum SettingsTab: String, CaseIterable {
+        case connection
+        case display
+
+        var title: String {
+            switch self {
+            case .connection: return "Connection"
+            case .display: return "Display"
+            }
+        }
+    }
 
     private static let managementPortalURL = URL(string: AppConstants.API.managementPortalURLString)
 
@@ -646,18 +659,34 @@ struct SettingsView: View {
 
             Divider()
 
-            ScrollView {
-                VStack(alignment: .leading, spacing: 16) {
-                    apiKeySection
-                    behaviorSection
-                    displaySection
-                    diagnosticsSection
+            tabPicker
+                .padding(.horizontal, 24)
+                .padding(.vertical, 12)
+
+            Divider()
+
+            if selectedTab == .connection {
+                ScrollView {
+                    VStack(alignment: .leading, spacing: 16) {
+                        apiKeySection
+                        behaviorSection
+                        proxySection
+                        diagnosticsSection
+                    }
+                    .padding(20)
+                    .frame(maxWidth: .infinity, alignment: .topLeading)
                 }
-                .padding(20)
-                .frame(maxWidth: .infinity, alignment: .topLeading)
+            } else {
+                ScrollView {
+                    VStack(alignment: .leading, spacing: 16) {
+                        displaySection
+                    }
+                    .padding(20)
+                    .frame(maxWidth: .infinity, alignment: .topLeading)
+                }
             }
         }
-        .frame(width: 560, height: 640)
+        .frame(width: 560, height: 600)
         .background {
             LinearGradient(
                 colors: [
@@ -701,6 +730,16 @@ struct SettingsView: View {
             statusPill
                 .layoutPriority(1)
         }
+    }
+
+    private var tabPicker: some View {
+        Picker("Settings tab", selection: $selectedTab) {
+            ForEach(SettingsTab.allCases, id: \.self) { tab in
+                Text(tab.title).tag(tab)
+            }
+        }
+        .pickerStyle(.segmented)
+        .labelsHidden()
     }
 
     private var statusPill: some View {
@@ -957,6 +996,90 @@ struct SettingsView: View {
             }
         }
         .contentShape(RoundedRectangle(cornerRadius: 14, style: .continuous))
+    }
+
+    private var proxySection: some View {
+        settingsCard(icon: "network", title: "Proxy", subtitle: "Route API requests through a proxy server.") {
+            VStack(spacing: 0) {
+                settingRow(
+                    title: "Proxy mode",
+                    subtitle: "Choose how API requests reach ZenMux servers."
+                ) {
+                    Picker("Proxy mode", selection: $settings.proxyMode) {
+                        ForEach(ProxyMode.allCases) { mode in
+                            Text(mode.title).tag(mode)
+                        }
+                    }
+                    .labelsHidden()
+                    .accessibilityLabel("Proxy mode")
+                    .pickerStyle(.segmented)
+                    .frame(width: 220)
+                }
+
+                if settings.proxyMode == .manual {
+                    rowDivider
+
+                    settingRow(
+                        title: "Proxy type",
+                        subtitle: "Select the protocol for your proxy server."
+                    ) {
+                        Picker("Proxy type", selection: $settings.proxyType) {
+                            ForEach(ProxyType.allCases) { type in
+                                Text(type.title).tag(type)
+                            }
+                        }
+                        .labelsHidden()
+                        .accessibilityLabel("Proxy type")
+                        .pickerStyle(.segmented)
+                        .frame(width: 170)
+                    }
+
+                    rowDivider
+
+                    settingRow(
+                        title: "Host",
+                        subtitle: "Proxy server address (IP or hostname)."
+                    ) {
+                        TextField("127.0.0.1", text: $settings.proxyHost)
+                            .textFieldStyle(.roundedBorder)
+                            .frame(width: 180)
+                    }
+
+                    rowDivider
+
+                    settingRow(
+                        title: "Port",
+                        subtitle: "Proxy server port (1–65535)."
+                    ) {
+                        TextField("1080", value: $settings.proxyPort, format: .number.grouping(.never))
+                            .textFieldStyle(.roundedBorder)
+                            .frame(width: 100)
+                    }
+
+                    rowDivider
+
+                    settingRow(
+                        title: "Username",
+                        subtitle: "Optional proxy authentication username."
+                    ) {
+                        TextField("username", text: $settings.proxyUsername)
+                            .textFieldStyle(.roundedBorder)
+                            .frame(width: 180)
+                    }
+
+                    rowDivider
+
+                    settingRow(
+                        title: "Password",
+                        subtitle: "Optional proxy authentication password."
+                    ) {
+                        SecureField("password", text: $settings.proxyPassword)
+                            .textFieldStyle(.roundedBorder)
+                            .frame(width: 180)
+                    }
+                }
+            }
+        }
     }
 
     private var diagnosticsSection: some View {
