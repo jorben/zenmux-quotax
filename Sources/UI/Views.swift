@@ -634,16 +634,18 @@ struct SettingsView: View {
     let onSaveAPIKey: (String) -> Void
     @State private var apiKeyInput: String = ""
     @State private var showKeySaved = false
-    @State private var selectedTab: SettingsTab = .general
+    @State private var selectedTab: SettingsTab = .connection
 
     private enum SettingsTab: String, CaseIterable {
-        case general
+        case connection
         case display
+        case general
 
         var title: String {
             switch self {
-            case .general: return "General"
+            case .connection: return "Connection"
             case .display: return "Display"
+            case .general: return "General"
             }
         }
     }
@@ -665,13 +667,19 @@ struct SettingsView: View {
 
             Divider()
 
-            if selectedTab == .general {
+            if selectedTab == .connection {
                 ScrollView {
                     VStack(alignment: .leading, spacing: 16) {
-                        behaviorSection
+                        apiKeySection
                         proxySection
-                        timezoneSection
-                        diagnosticsSection
+                    }
+                    .padding(20)
+                    .frame(maxWidth: .infinity, alignment: .topLeading)
+                }
+            } else if selectedTab == .display {
+                ScrollView {
+                    VStack(alignment: .leading, spacing: 16) {
+                        displaySection
                     }
                     .padding(20)
                     .frame(maxWidth: .infinity, alignment: .topLeading)
@@ -679,8 +687,9 @@ struct SettingsView: View {
             } else {
                 ScrollView {
                     VStack(alignment: .leading, spacing: 16) {
-                        apiKeySection
-                        displaySection
+                        behaviorSection
+                        timezoneSection
+                        diagnosticsSection
                     }
                     .padding(20)
                     .frame(maxWidth: .infinity, alignment: .topLeading)
@@ -986,14 +995,17 @@ struct SettingsView: View {
 
     private var timezoneSection: some View {
         settingsCard(icon: "globe", title: "Time zone", subtitle: "Used for expiration and quota reset times.") {
-            Picker("Time zone", selection: $settings.timeZoneIdentifier) {
-                ForEach(SettingsManager.preferredTimeZoneIdentifiers, id: \.self) { identifier in
-                    Text(identifier).tag(identifier)
+            HStack {
+                Spacer()
+                Picker("Time zone", selection: $settings.timeZoneIdentifier) {
+                    ForEach(SettingsManager.preferredTimeZoneIdentifiers, id: \.self) { identifier in
+                        Text(identifier).tag(identifier)
+                    }
                 }
+                .labelsHidden()
+                .accessibilityLabel("Time zone")
+                .frame(width: 320)
             }
-            .labelsHidden()
-            .accessibilityLabel("Time zone")
-            .frame(maxWidth: .infinity, alignment: .leading)
         }
     }
 
