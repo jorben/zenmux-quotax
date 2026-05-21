@@ -292,7 +292,8 @@ public final class SettingsManager: ObservableObject {
         if let hours = parseUTCOffsetHours(identifier), utcOffsetOptions.contains(hours) {
             return utcOffsetIdentifier(hours)
         }
-        let currentOffset = TimeZone(identifier: identifier)?.secondsFromGMT()
+        let currentOffset =
+            TimeZone(identifier: identifier)?.secondsFromGMT()
             ?? TimeZone.current.secondsFromGMT()
         let hoursOffset = Int(round(Double(currentOffset) / 3600.0))
         let clamped = max(-12, min(14, hoursOffset))
