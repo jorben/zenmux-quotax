@@ -26,6 +26,7 @@ public final class ZenmuxAPIService: ObservableObject {
     }
 
     public func updateProxyConfiguration(_ config: ProxyConfiguration?) {
+        apiClient.invalidate()
         apiClient = ZenmuxAPIClient(proxyConfig: config)
         AppLog.settings.info("Proxy configuration updated: mode=\(config?.mode.rawValue ?? "none")")
     }

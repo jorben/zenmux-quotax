@@ -55,6 +55,16 @@ public final class AppDelegate: NSObject, NSApplicationDelegate, NSWindowDelegat
                 guard let self else { return }
                 let newConfig = self.settings.proxyConfiguration
                 if !ProxyConfiguration.isEqual(self.lastProxyConfig, newConfig) {
+                    // Prevent silent fallback to direct connection when the user selected
+                    // manual proxy mode but the configuration is invalid (nil).
+                    // In that case, keep the previous proxy settings and log a warning
+                    // rather than routing traffic unproxied.
+                    if newConfig == nil && self.settings.proxyMode == .manual {
+                        AppLog.settings.warning(
+                            "Manual proxy configuration is incomplete or invalid; keeping previous proxy settings until the configuration is corrected"
+                        )
+                        return
+                    }
                     self.lastProxyConfig = newConfig
                     self.apiService.updateProxyConfiguration(newConfig)
                 }

@@ -9,25 +9,44 @@ extension URLSession: URLSessionDataFetching {}
 public struct ZenmuxAPIClient: Sendable {
     private let session: URLSessionDataFetching
     private let decoder: JSONDecoder
+    /// Non-nil only when this client owns the URLSession (created via `init(proxyConfig:)`);
+    /// used to invalidate the session on replacement, preventing delegate/resource leaks.
+    private let managedSession: URLSession?
 
     public init(session: URLSessionDataFetching = URLSession.shared, decoder: JSONDecoder = JSONDecoder()) {
         self.session = session
         self.decoder = decoder
+        self.managedSession = nil
     }
 
     public init(proxyConfig: ProxyConfiguration?, decoder: JSONDecoder = JSONDecoder()) {
-        self.session = Self.createSession(proxyConfig: proxyConfig)
+        let urlSession = Self.createSession(proxyConfig: proxyConfig)
+        self.session = urlSession
         self.decoder = decoder
+        self.managedSession = urlSession
+    }
+
+    /// Invalidate the underlying URLSession created by `init(proxyConfig:)`.
+    /// Call this before replacing the client to avoid leaking the session and its delegate.
+    /// No-op for clients initialized with an injected session.
+    public func invalidate() {
+        managedSession?.invalidateAndCancel()
     }
 
     private static func createSession(proxyConfig: ProxyConfiguration?) -> URLSession {
         guard let config = proxyConfig else {
-            return URLSession(configuration: .ephemeral)
+            // No proxy config specified — explicitly disable system proxy to avoid
+            // inheriting system proxy settings from the ephemeral configuration.
+            let sessionConfig = URLSessionConfiguration.ephemeral
+            sessionConfig.connectionProxyDictionary = [:]
+            return URLSession(configuration: sessionConfig)
         }
 
         switch config.mode {
         case .none:
-            return URLSession(configuration: .ephemeral)
+            let config = URLSessionConfiguration.ephemeral
+            config.connectionProxyDictionary = [:]
+            return URLSession(configuration: config)
 
         case .system:
             return URLSession(configuration: .default)
@@ -64,6 +83,16 @@ public struct ZenmuxAPIClient: Sendable {
             proxy[kCFNetworkProxiesSOCKSEnable] = true
             proxy[kCFNetworkProxiesSOCKSProxy] = host
             proxy[kCFNetworkProxiesSOCKSPort] = portNumber
+            // Explicitly request SOCKS5; default version varies by platform.
+            proxy[kCFStreamPropertySOCKSVersion] = kCFStreamSocketSOCKSVersion5
+            // SOCKS credentials must be placed in the proxy dictionary.
+            // URLSessionDelegate-based challenges are not reliably delivered for SOCKS5.
+            if let username = config.username?.nilIfEmpty {
+                proxy[kCFStreamPropertySOCKSUser] = username
+                if let password = config.password {
+                    proxy[kCFStreamPropertySOCKSPassword] = password
+                }
+            }
         case nil:
             return [:]
         }
