@@ -43,12 +43,53 @@ public final class StatusBarView: NSView {
 
     private func bindService() {
         cancellables.removeAll()
-        let redraw: () -> Void = { [weak self] in
-            DispatchQueue.main.async { self?.needsDisplay = true }
+        let update: () -> Void = { [weak self] in
+            // objectWillChange fires BEFORE the property changes.
+            // Dispatch async so recalculatePreferredWidth reads the NEW value.
+            DispatchQueue.main.async { [weak self] in
+                guard let self else { return }
+                self.recalculatePreferredWidth()
+                self.superview?.layoutSubtreeIfNeeded()
+                self.needsDisplay = true
+            }
         }
-        apiService?.objectWillChange.sink { _ in redraw() }.store(in: &cancellables)
-        settings?.objectWillChange.sink { _ in redraw() }.store(in: &cancellables)
+        apiService?.objectWillChange.sink { _ in update() }.store(in: &cancellables)
+        settings?.objectWillChange.sink { _ in update() }.store(in: &cancellables)
+        recalculatePreferredWidth()
         needsDisplay = true
+    }
+
+    /// Compute and apply the preferred width BEFORE drawing so that
+    /// by the time `draw(_:)` runs, `bounds.width` already matches.
+    private func recalculatePreferredWidth() {
+        let height = NSStatusBar.system.thickness
+        let color = statusBarDataColor()
+        let textAttributes = baseTextAttributes(color: color)
+        let labelWidth = max(
+            measuredWidth(for: "5H", attributes: textAttributes),
+            measuredWidth(for: "7D", attributes: textAttributes)
+        )
+        let quota5 = quotaDisplay(for: apiService?.subscriptionData?.quota5Hour)
+        let quota7 = quotaDisplay(for: apiService?.subscriptionData?.quota7Day)
+        let reservedValueWidth = measuredWidth(for: "99.9%", attributes: textAttributes)
+        let valueWidth = max(
+            reservedValueWidth,
+            measuredWidth(for: quota5.text, attributes: textAttributes),
+            measuredWidth(for: quota7.text, attributes: textAttributes)
+        )
+        let dummyBounds = NSRect(x: 0, y: 0, width: preferredStatusWidth, height: height)
+        let iconSize = statusIconSize(in: dummyBounds)
+        let ringSize = statusRingSize(in: dummyBounds)
+        let barSize = statusBarProgressSize(in: dummyBounds)
+        let style = settings?.statusBarPresentationStyle ?? .labelsAndPercentage
+        let widthMetrics = WidthMetrics(
+            label: labelWidth,
+            value: valueWidth,
+            icon: iconSize.width,
+            ring: ringSize.width,
+            bar: barSize.width
+        )
+        updatePreferredStatusWidth(preferredWidth(for: style, metrics: widthMetrics))
     }
 
     public override func draw(_ dirtyRect: NSRect) {
@@ -88,14 +129,6 @@ public final class StatusBarView: NSView {
         let ringSize = statusRingSize(in: bounds)
         let barSize = statusBarProgressSize(in: bounds)
         let style = settings?.statusBarPresentationStyle ?? .labelsAndPercentage
-        let widthMetrics = WidthMetrics(
-            label: labelWidth,
-            value: valueWidth,
-            icon: iconSize.width,
-            ring: ringSize.width,
-            bar: barSize.width
-        )
-        updatePreferredStatusWidth(preferredWidth(for: style, metrics: widthMetrics))
 
         let context = RenderContext(
             quota5: quota5.text,
@@ -411,11 +444,15 @@ private extension StatusBarView {
         return max(minimumWidth, ceil(contentWidth + padding))
     }
 
-    private func updatePreferredStatusWidth(_ width: CGFloat) {
-        guard abs(width - preferredStatusWidth) >= 1 else { return }
+    /// Returns `true` when the width actually changed, signalling that the
+    /// current draw pass should be skipped (bounds are stale).
+    @discardableResult
+    private func updatePreferredStatusWidth(_ width: CGFloat) -> Bool {
+        guard abs(width - preferredStatusWidth) >= 1 else { return false }
         preferredStatusWidth = width
         invalidateIntrinsicContentSize()
         preferredWidthDidChange?(width)
+        return true
     }
 
     private func drawRow(label: String, value: String, layout: RowLayout, color: NSColor) {

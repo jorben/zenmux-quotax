@@ -101,6 +101,9 @@ public final class AppDelegate: NSObject, NSApplicationDelegate, NSWindowDelegat
         menuHost?.needsLayout = true
         statusItem?.button?.appearance = appearance
         statusView?.appearance = appearance
+        statusView?.invalidateIntrinsicContentSize()
+        statusItem?.button?.needsLayout = true
+        statusItem?.button?.layoutSubtreeIfNeeded()
         statusView?.needsDisplay = true
     }
 
@@ -164,6 +167,7 @@ public final class AppDelegate: NSObject, NSApplicationDelegate, NSWindowDelegat
     private func openMenuPanel() {
         guard !isMenuOpen, menuPanel == nil else { return }
         guard let button = statusItem?.button else { return }
+        button.layoutSubtreeIfNeeded()
         let host = makeMenuHost()
         let fittingSize = host.fittingSize
         let panelHeight = max(fittingSize.height, AppConstants.Menu.minimumHeight)
