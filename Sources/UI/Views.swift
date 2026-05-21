@@ -996,9 +996,11 @@ struct SettingsView: View {
     }
 
     private var timezoneSection: some View {
-        settingsCard(icon: "globe", title: "Time zone", subtitle: "Used for expiration and quota reset times.") {
-            HStack {
-                Spacer()
+        settingsCard(
+            icon: "globe",
+            title: "Time zone",
+            subtitle: "Used for expiration and quota reset times.",
+            headerAction: {
                 Picker("Time zone", selection: $settings.timeZoneIdentifier) {
                     ForEach(SettingsManager.utcOffsetOptions, id: \.self) { hours in
                         Text(SettingsManager.utcOffsetTitle(hours))
@@ -1010,6 +1012,8 @@ struct SettingsView: View {
                 .frame(width: 160)
                 .fixedSize()
             }
+        ) {
+            EmptyView()
         }
     }
 
@@ -1166,6 +1170,16 @@ struct SettingsView: View {
     }
 
     private func settingsCard<Content: View>(icon: String, title: String, subtitle: String, @ViewBuilder content: () -> Content) -> some View {
+        settingsCard(icon: icon, title: title, subtitle: subtitle, headerAction: { EmptyView() }, content: content)
+    }
+
+    private func settingsCard<Content: View, HeaderAction: View>(
+        icon: String,
+        title: String,
+        subtitle: String,
+        @ViewBuilder headerAction: () -> HeaderAction,
+        @ViewBuilder content: () -> Content
+    ) -> some View {
         VStack(alignment: .leading, spacing: 14) {
             HStack(alignment: .top, spacing: 12) {
                 Image(systemName: icon)
@@ -1186,7 +1200,9 @@ struct SettingsView: View {
                         .fixedSize(horizontal: false, vertical: true)
                 }
 
-                Spacer(minLength: 0)
+                Spacer(minLength: 12)
+
+                headerAction()
             }
 
             content()
