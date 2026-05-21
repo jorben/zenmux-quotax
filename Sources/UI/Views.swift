@@ -634,15 +634,15 @@ struct SettingsView: View {
     let onSaveAPIKey: (String) -> Void
     @State private var apiKeyInput: String = ""
     @State private var showKeySaved = false
-    @State private var selectedTab: SettingsTab = .connection
+    @State private var selectedTab: SettingsTab = .general
 
     private enum SettingsTab: String, CaseIterable {
-        case connection
+        case general
         case display
 
         var title: String {
             switch self {
-            case .connection: return "Connection"
+            case .general: return "General"
             case .display: return "Display"
             }
         }
@@ -665,12 +665,12 @@ struct SettingsView: View {
 
             Divider()
 
-            if selectedTab == .connection {
+            if selectedTab == .general {
                 ScrollView {
                     VStack(alignment: .leading, spacing: 16) {
-                        apiKeySection
                         behaviorSection
                         proxySection
+                        timezoneSection
                         diagnosticsSection
                     }
                     .padding(20)
@@ -679,6 +679,7 @@ struct SettingsView: View {
             } else {
                 ScrollView {
                     VStack(alignment: .leading, spacing: 16) {
+                        apiKeySection
                         displaySection
                     }
                     .padding(20)
@@ -850,7 +851,7 @@ struct SettingsView: View {
     }
 
     private var displaySection: some View {
-        settingsCard(icon: "menubar.rectangle", title: "Display", subtitle: "Decide how theme, quota, and time are shown in Quotax.") {
+        settingsCard(icon: "menubar.rectangle", title: "Display", subtitle: "Decide how theme and quota are shown in Quotax.") {
             VStack(spacing: 0) {
                 settingRow(
                     title: "Theme",
@@ -905,21 +906,6 @@ struct SettingsView: View {
                     .frame(width: 220)
                 }
 
-                rowDivider
-
-                settingRow(
-                    title: "Time zone",
-                    subtitle: "Used for expiration and quota reset times."
-                ) {
-                    Picker("Time zone", selection: $settings.timeZoneIdentifier) {
-                        ForEach(SettingsManager.preferredTimeZoneIdentifiers, id: \.self) { identifier in
-                            Text(identifier).tag(identifier)
-                        }
-                    }
-                    .labelsHidden()
-                    .accessibilityLabel("Time zone")
-                    .frame(width: 320)
-                }
             }
         }
     }
@@ -996,6 +982,19 @@ struct SettingsView: View {
             }
         }
         .contentShape(RoundedRectangle(cornerRadius: 14, style: .continuous))
+    }
+
+    private var timezoneSection: some View {
+        settingsCard(icon: "globe", title: "Time zone", subtitle: "Used for expiration and quota reset times.") {
+            Picker("Time zone", selection: $settings.timeZoneIdentifier) {
+                ForEach(SettingsManager.preferredTimeZoneIdentifiers, id: \.self) { identifier in
+                    Text(identifier).tag(identifier)
+                }
+            }
+            .labelsHidden()
+            .accessibilityLabel("Time zone")
+            .frame(maxWidth: .infinity, alignment: .leading)
+        }
     }
 
     private var proxySection: some View {
