@@ -874,7 +874,6 @@ struct SettingsView: View {
                 .labelsHidden()
                 .accessibilityLabel("Theme")
                 .pickerStyle(.segmented)
-                .frame(width: 220)
             }
         }
     }
@@ -894,7 +893,6 @@ struct SettingsView: View {
                     .labelsHidden()
                     .accessibilityLabel("Status bar mode")
                     .pickerStyle(.segmented)
-                    .frame(width: 220)
                 }
 
                 rowDivider
@@ -911,7 +909,6 @@ struct SettingsView: View {
                     .labelsHidden()
                     .accessibilityLabel("Status bar quota")
                     .pickerStyle(.segmented)
-                    .frame(width: 250)
                 }
 
                 rowDivider
@@ -1009,8 +1006,6 @@ struct SettingsView: View {
                 }
                 .labelsHidden()
                 .accessibilityLabel("Time zone")
-                .frame(width: 160)
-                .fixedSize()
             }
         ) {
             EmptyView()
@@ -1032,7 +1027,6 @@ struct SettingsView: View {
                     .labelsHidden()
                     .accessibilityLabel("Proxy mode")
                     .pickerStyle(.segmented)
-                    .frame(width: 220)
                 }
 
                 if settings.proxyMode == .manual {
@@ -1050,7 +1044,6 @@ struct SettingsView: View {
                         .labelsHidden()
                         .accessibilityLabel("Proxy type")
                         .pickerStyle(.segmented)
-                        .frame(width: 170)
                     }
 
                     rowDivider
@@ -1116,7 +1109,6 @@ struct SettingsView: View {
                     .labelsHidden()
                     .accessibilityLabel("Minimum log level")
                     .pickerStyle(.segmented)
-                    .frame(width: 260)
                 }
 
                 rowDivider
@@ -1150,7 +1142,7 @@ struct SettingsView: View {
     }
 
     private func settingRow<Control: View>(title: String, subtitle: String, @ViewBuilder control: () -> Control) -> some View {
-        HStack(alignment: .center, spacing: 16) {
+        HStack(alignment: .center, spacing: 0) {
             VStack(alignment: .leading, spacing: 3) {
                 Text(title)
                     .font(.subheadline)
@@ -1162,11 +1154,11 @@ struct SettingsView: View {
             }
             .layoutPriority(1)
 
-            Spacer(minLength: 12)
+            Spacer(minLength: 16)
 
             control()
         }
-        .frame(maxWidth: .infinity, alignment: .leading)
+        .frame(maxWidth: .infinity)
     }
 
     private func settingsCard<Content: View>(icon: String, title: String, subtitle: String, @ViewBuilder content: () -> Content) -> some View {

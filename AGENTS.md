@@ -33,3 +33,20 @@ Pull requests should describe the user-visible change, list build/manual verific
 
 ## Release & Configuration Notes
 `.github/workflows/release.yml` runs on tags such as `v1.2.3`. It updates bundle versions from the tag, builds x86_64 and arm64 artifacts, signs, notarizes, staples, and uploads zipped apps. Never commit API keys or Apple signing credentials; release signing depends on GitHub Actions secrets.
+
+## UI Layout Guidelines (SwiftUI on macOS)
+**Do NOT use `.frame(width:)` or `.frame(maxWidth: .infinity)` on Picker, Toggle, or other native AppKit controls for alignment purposes.** macOS bridged controls such as NSSegmentedControl and NSPopUpButton do not fill their SwiftUI frame container — they render at their intrinsic size and center within the frame, producing uncontrollable whitespace between the container edges and the control.
+
+The correct right-alignment pattern (see `settingRow`):
+```swift
+HStack(alignment: .center, spacing: 0) {
+    VStack(alignment: .leading, ...) { /* title + subtitle */ }
+        .layoutPriority(1)
+    Spacer(minLength: 16)
+    control()   // no .frame() modifier
+}
+.frame(maxWidth: .infinity)
+```
+- Use a `Spacer` to push the control to the trailing end of the HStack so its right edge sits flush against the parent container's content boundary.
+- Let the control keep its intrinsic size (determined by AppKit rendering) without wrapping it in any frame modifier.
+- If you genuinely need to constrain the width of a TextField or similar input, apply `.frame(width:)` only to that TextField — never to Picker or Toggle.
