@@ -1000,13 +1000,14 @@ struct SettingsView: View {
             HStack {
                 Spacer()
                 Picker("Time zone", selection: $settings.timeZoneIdentifier) {
-                    ForEach(SettingsManager.preferredTimeZoneIdentifiers, id: \.self) { identifier in
-                        Text(identifier).tag(identifier)
+                    ForEach(SettingsManager.utcOffsetOptions, id: \.self) { hours in
+                        Text(SettingsManager.utcOffsetTitle(hours))
+                            .tag(SettingsManager.utcOffsetIdentifier(hours))
                     }
                 }
                 .labelsHidden()
                 .accessibilityLabel("Time zone")
-                .frame(width: 280)
+                .frame(width: 160)
                 .fixedSize()
             }
         }

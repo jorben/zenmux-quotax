@@ -91,6 +91,7 @@ public enum ProxyMode: String, CaseIterable, Identifiable, Sendable {
 
 public enum ProxyType: String, CaseIterable, Identifiable, Sendable {
     case http
+    case https
     case socks5
 
     public var id: String { rawValue }
@@ -98,6 +99,7 @@ public enum ProxyType: String, CaseIterable, Identifiable, Sendable {
     public var title: String {
         switch self {
         case .http: return "HTTP"
+        case .https: return "HTTPS"
         case .socks5: return "SOCKS5"
         }
     }
@@ -149,19 +151,22 @@ public final class SettingsManager: ObservableObject {
         static let proxyPassword = "proxy_password"
     }
 
-    public static let preferredTimeZoneIdentifiers: [String] = {
-        let minOffset = -12 * 3600
-        let maxOffset = 14 * 3600
-        return TimeZone.knownTimeZoneIdentifiers
-            .compactMap { identifier -> (String, Int)? in
-                guard let tz = TimeZone(identifier: identifier) else { return nil }
-                let offset = tz.secondsFromGMT()
-                guard offset >= minOffset, offset <= maxOffset else { return nil }
-                return (identifier, offset)
-            }
-            .sorted { $0.1 < $1.1 }
-            .map { $0.0 }
-    }()
+    public static let utcOffsetOptions: [Int] = Array(-12...14)
+
+    public static func utcOffsetTitle(_ hours: Int) -> String {
+        if hours == 0 { return "UTC" }
+        let sign = hours > 0 ? "+" : ""
+        return "UTC\(sign)\(hours)"
+    }
+
+    public static func utcOffsetIdentifier(_ hours: Int) -> String {
+        "UTC\(hours >= 0 ? "+" : "")\(hours)"
+    }
+
+    public static func parseUTCOffsetHours(_ identifier: String) -> Int? {
+        guard identifier.hasPrefix("UTC") else { return nil }
+        return Int(identifier.dropFirst(3))
+    }
 
     private let defaults: UserDefaults
     private let launchAtLoginService: LaunchAtLoginService
@@ -277,25 +282,21 @@ public final class SettingsManager: ObservableObject {
     }
 
     public var timeZone: TimeZone {
-        TimeZone(identifier: timeZoneIdentifier) ?? .current
+        if let hours = Self.parseUTCOffsetHours(timeZoneIdentifier) {
+            return TimeZone(secondsFromGMT: hours * 3600) ?? .current
+        }
+        return .current
     }
 
     public static func resolveTimeZoneIdentifier(_ identifier: String) -> String {
-        if let tz = TimeZone(identifier: identifier), preferredTimeZoneIdentifiers.contains(tz.identifier) {
-            return tz.identifier
+        if let hours = parseUTCOffsetHours(identifier), utcOffsetOptions.contains(hours) {
+            return utcOffsetIdentifier(hours)
         }
-        let targetOffset = TimeZone(identifier: identifier)?.secondsFromGMT() ?? TimeZone.current.secondsFromGMT()
-        var best: String?
-        var bestDiff = Int.max
-        for candidate in preferredTimeZoneIdentifiers {
-            guard let tz = TimeZone(identifier: candidate) else { continue }
-            let diff = abs(tz.secondsFromGMT() - targetOffset)
-            if diff < bestDiff {
-                bestDiff = diff
-                best = candidate
-            }
-        }
-        return best ?? preferredTimeZoneIdentifiers.first ?? TimeZone.current.identifier
+        let currentOffset = TimeZone(identifier: identifier)?.secondsFromGMT()
+            ?? TimeZone.current.secondsFromGMT()
+        let hoursOffset = Int(round(Double(currentOffset) / 3600.0))
+        let clamped = max(-12, min(14, hoursOffset))
+        return utcOffsetIdentifier(clamped)
     }
 
     public var proxyConfiguration: ProxyConfiguration? {
