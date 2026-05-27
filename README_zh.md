@@ -5,9 +5,12 @@
 </p>
 
 <p align="center">
-  <img alt="Swift" src="https://img.shields.io/badge/Swift-AppKit%20%2B%20SwiftUI-orange?style=flat-square">
-  <img alt="macOS" src="https://img.shields.io/badge/macOS-15.7%2B-blue?style=flat-square">
+  <img alt="Release" src="https://img.shields.io/github/actions/workflow/status/tiylabs/zenmux-quotax/release.yml?style=flat-square&label=release">
+  <img alt="Downloads" src="https://img.shields.io/github/downloads/tiylabs/zenmux-quotax/total?style=flat-square">
   <img alt="Build" src="https://img.shields.io/badge/build-source--first-lightgrey?style=flat-square">
+  <img alt="macOS" src="https://img.shields.io/badge/macOS-15.7%2B-blue?style=flat-square">
+  <img alt="Swift" src="https://img.shields.io/badge/Swift-AppKit%20%2B%20SwiftUI-orange?style=flat-square">
+  <img alt="License" src="https://img.shields.io/badge/license-Apache--2.0-green?style=flat-square">
 </p>
 
 <p align="center">
@@ -85,7 +88,8 @@ Sources/
   main.swift                    应用入口
   Core/
     AppConstants.swift          应用级常量
-    AppLog.swift                OSLog 日志分类
+    AppLog.swift                持久化文件日志分类
+    PersistentLogStore.swift    基于文件的日志存储、轮转与会话跟踪
     AppResources.swift          应用图标与资源加载辅助逻辑
   Services/
     LaunchAtLoginService.swift  登录启动集成
@@ -126,24 +130,20 @@ flowchart LR
 
 ## Debug 日志
 
-Quotax 使用 macOS Unified Logging（`OSLog`），不会写入自定义日志文件。日志 subsystem 是 `com.zenmux.quotax`，常见 category 包括 `lifecycle`、`network`、`refresh`、`decode` 和 `settings`。
+Quotax 写入持久化文件日志，不再使用 macOS Unified Logging（`OSLog`）。日志存储在 `~/Library/Logs/com.zenmux.quotax/quotax.log`；归档日志使用 `quotax-YYYYMMDD-HHMMSS-SSS.log` 格式命名，会话状态通过 `session-state.json` 跟踪，以便下次启动时报告上次会话是否异常终止。每条日志记录包含时间戳、级别、分类、会话 ID、进程 ID 和消息。
 
-复现问题时实时查看日志：
+设置窗口中的"诊断"部分可修改最低日志级别。日志文件仅存储达到或超过所选阈值（`debug`、`info`、`warning` 或 `error`）的条目。日志文件达到 5 MB 时自动轮转，最多保留 10 个归档日志。
+
+使用"诊断"部分的"打开日志文件夹"按钮，或运行以下命令来查看日志：
 
 ```bash
-log stream --predicate 'subsystem == "com.zenmux.quotax"' --info --debug
+open ~/Library/Logs/com.zenmux.quotax/
 ```
 
-查看最近一段时间的历史日志：
+实时查看日志文件：
 
 ```bash
-log show --predicate 'subsystem == "com.zenmux.quotax"' --last 1h
-```
-
-只查看网络相关日志：
-
-```bash
-log stream --predicate 'subsystem == "com.zenmux.quotax" && category == "network"' --info --debug
+tail -f ~/Library/Logs/com.zenmux.quotax/quotax.log
 ```
 
 `URLError.cancelled` / `-999 cancelled` 通常表示进行中的刷新请求被新的刷新或应用关闭主动取消。除非后续伴随 crash 或 terminate 日志，否则应将它视为取消信号，而不是致命网络错误。
