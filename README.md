@@ -5,9 +5,12 @@
 </p>
 
 <p align="center">
-  <img alt="Swift" src="https://img.shields.io/badge/Swift-AppKit%20%2B%20SwiftUI-orange?style=flat-square">
-  <img alt="macOS" src="https://img.shields.io/badge/macOS-15.7%2B-blue?style=flat-square">
+  <img alt="Release" src="https://img.shields.io/github/actions/workflow/status/tiylabs/zenmux-quotax/release.yml?style=flat-square&label=release">
+  <img alt="Downloads" src="https://img.shields.io/github/downloads/tiylabs/zenmux-quotax/total?style=flat-square">
   <img alt="Build" src="https://img.shields.io/badge/build-source--first-lightgrey?style=flat-square">
+  <img alt="macOS" src="https://img.shields.io/badge/macOS-15.7%2B-blue?style=flat-square">
+  <img alt="Swift" src="https://img.shields.io/badge/Swift-AppKit%20%2B%20SwiftUI-orange?style=flat-square">
+  <img alt="License" src="https://img.shields.io/badge/license-Apache--2.0-green?style=flat-square">
 </p>
 
 <p align="center">
@@ -85,7 +88,8 @@ Sources/
   main.swift                    App entry point
   Core/
     AppConstants.swift          App-wide constants
-    AppLog.swift                OSLog categories
+    AppLog.swift                Persistent file logger categories
+    PersistentLogStore.swift    File-based log storage, rotation, and session tracking
     AppResources.swift          App icon and resource loading helper
   Services/
     LaunchAtLoginService.swift  Launch-at-login integration
@@ -126,24 +130,20 @@ flowchart LR
 
 ## Debugging Logs
 
-Quotax uses macOS Unified Logging through `OSLog`; it does not write a custom log file. The logging subsystem is `com.zenmux.quotax`, with categories such as `lifecycle`, `network`, `refresh`, `decode`, and `settings`.
+Quotax writes persistent file logs and does not use macOS Unified Logging (`OSLog`). Logs are stored in `~/Library/Logs/com.zenmux.quotax/quotax.log`; archived logs use names like `quotax-YYYYMMDD-HHMMSS-SSS.log`, and session state is tracked in `session-state.json` so the next launch can report when the previous session did not terminate normally. Each log entry includes timestamp, level, category, session id, pid, and message.
 
-Stream live logs while reproducing an issue:
+The settings window includes a Diagnostics section where the minimum log level can be changed. The log file stores entries at or above the selected threshold (`debug`, `info`, `warning`, or `error`). Log files are automatically rotated when they reach 5 MB, with up to 10 archived logs retained.
+
+Use the Diagnostics section's Open Log Folder button, or run the command below, to inspect logs while reproducing an issue:
 
 ```bash
-log stream --predicate 'subsystem == "com.zenmux.quotax"' --info --debug
+open ~/Library/Logs/com.zenmux.quotax/
 ```
 
-Inspect recent historical logs:
+Stream the live log file during a session:
 
 ```bash
-log show --predicate 'subsystem == "com.zenmux.quotax"' --last 1h
-```
-
-Filter network-only logs:
-
-```bash
-log stream --predicate 'subsystem == "com.zenmux.quotax" && category == "network"' --info --debug
+tail -f ~/Library/Logs/com.zenmux.quotax/quotax.log
 ```
 
 `URLError.cancelled` / `-999 cancelled` usually means an in-flight refresh request was intentionally cancelled by a newer refresh or app shutdown. Treat it as a cancellation signal instead of a fatal network failure unless it is followed by crash or termination logs.
