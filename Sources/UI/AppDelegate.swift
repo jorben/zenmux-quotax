@@ -35,7 +35,7 @@ public final class AppDelegate: NSObject, NSApplicationDelegate, NSWindowDelegat
         if settings.trimmedAPIKey.isEmpty {
             openSettings()
         } else {
-            Task { await apiService.refresh(apiKey: settings.apiKey) }
+            Task { await apiService.refresh(apiKey: settings.apiKey, apiBaseURLString: settings.apiBaseURLString) }
         }
     }
 
@@ -225,7 +225,7 @@ public final class AppDelegate: NSObject, NSApplicationDelegate, NSWindowDelegat
             settings: settings,
             onRefresh: { [weak self] in
                 guard let self else { return }
-                Task { await self.apiService.refresh(apiKey: self.settings.apiKey) }
+                Task { await self.apiService.refresh(apiKey: self.settings.apiKey, apiBaseURLString: self.settings.apiBaseURLString) }
             },
             onOpenSettings: { [weak self] in
                 self?.closeMenuPanel()
@@ -292,7 +292,11 @@ public final class AppDelegate: NSObject, NSApplicationDelegate, NSWindowDelegat
             onSaveAPIKey: { [weak self] apiKey in
                 guard let self else { return }
                 self.settings.apiKey = apiKey
-                Task { await self.apiService.refresh(apiKey: apiKey) }
+                Task { await self.apiService.refresh(apiKey: apiKey, apiBaseURLString: self.settings.apiBaseURLString) }
+            },
+            onSaveAPIBase: { [weak self] in
+                guard let self else { return }
+                Task { await self.apiService.refresh(apiKey: self.settings.apiKey, apiBaseURLString: self.settings.apiBaseURLString) }
             }
         )
         let hosting = NSHostingController(rootView: content)
@@ -309,7 +313,7 @@ public final class AppDelegate: NSObject, NSApplicationDelegate, NSWindowDelegat
     }
 
     @objc public func openManagementPortal() {
-        if let url = URL(string: AppConstants.API.managementPortalURLString) {
+        if let url = settings.managementPortalURL {
             NSWorkspace.shared.open(url)
         }
     }

@@ -105,6 +105,22 @@ public enum ProxyType: String, CaseIterable, Identifiable, Sendable {
     }
 }
 
+public enum APIBaseOption: String, CaseIterable, Identifiable {
+    case zenmuxAI
+    case zenmuxDev
+    case custom
+
+    public var id: String { rawValue }
+
+    public var title: String {
+        switch self {
+        case .zenmuxAI: return AppConstants.API.zenmuxAIBaseURLString
+        case .zenmuxDev: return AppConstants.API.zenmuxDevBaseURLString
+        case .custom: return "Custom"
+        }
+    }
+}
+
 public struct ProxyConfiguration: Sendable {
     public let mode: ProxyMode
     public let type: ProxyType?
@@ -134,6 +150,8 @@ public final class SettingsManager: ObservableObject {
 
     private enum Keys {
         static let apiKey = "api_key"
+        static let apiBaseOption = "api_base_option"
+        static let customAPIBase = "custom_api_base"
         static let refreshInterval = "refresh_interval"
         static let alwaysRefresh = "alwaysRefresh"
         static let statusBarQuotaDisplayMode = "statusBarQuotaDisplayMode"
@@ -176,6 +194,14 @@ public final class SettingsManager: ObservableObject {
 
     @Published public var apiKey: String {
         didSet { defaults.set(apiKey, forKey: Keys.apiKey) }
+    }
+
+    @Published public var apiBaseOption: APIBaseOption {
+        didSet { defaults.set(apiBaseOption.rawValue, forKey: Keys.apiBaseOption) }
+    }
+
+    @Published public var customAPIBase: String {
+        didSet { defaults.set(customAPIBase, forKey: Keys.customAPIBase) }
     }
 
     @Published public var refreshInterval: TimeInterval {
@@ -251,6 +277,9 @@ public final class SettingsManager: ObservableObject {
         self.defaults = defaults
         self.launchAtLoginService = launchAtLoginService
         self.apiKey = defaults.string(forKey: Keys.apiKey) ?? ""
+        let storedAPIBaseOption = defaults.string(forKey: Keys.apiBaseOption) ?? APIBaseOption.zenmuxAI.rawValue
+        self.apiBaseOption = APIBaseOption(rawValue: storedAPIBaseOption) ?? .zenmuxAI
+        self.customAPIBase = defaults.string(forKey: Keys.customAPIBase) ?? ""
         let storedInterval = defaults.double(forKey: Keys.refreshInterval)
         self.refreshInterval = storedInterval > 0 ? storedInterval : AppConstants.Refresh.defaultInterval
         self.alwaysRefresh = defaults.object(forKey: Keys.alwaysRefresh) as? Bool ?? true
@@ -282,6 +311,25 @@ public final class SettingsManager: ObservableObject {
 
     public var trimmedAPIKey: String {
         apiKey.trimmingCharacters(in: .whitespacesAndNewlines)
+    }
+
+    public var apiBaseURLString: String {
+        switch apiBaseOption {
+        case .zenmuxAI:
+            return AppConstants.API.zenmuxAIBaseURLString
+        case .zenmuxDev:
+            return AppConstants.API.zenmuxDevBaseURLString
+        case .custom:
+            return customAPIBase.trimmingCharacters(in: .whitespacesAndNewlines)
+        }
+    }
+
+    public var subscriptionDetailURL: URL? {
+        AppConstants.API.subscriptionDetailURL(baseURLString: apiBaseURLString)
+    }
+
+    public var managementPortalURL: URL? {
+        AppConstants.API.managementPortalURL(baseURLString: apiBaseURLString)
     }
 
     public var timeZone: TimeZone {

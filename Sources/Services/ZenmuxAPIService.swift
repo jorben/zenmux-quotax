@@ -17,6 +17,7 @@ public final class ZenmuxAPIService: ObservableObject {
     private struct AutoRefreshSnapshot {
         let alwaysRefresh: Bool
         let apiKey: String
+        let apiBaseURLString: String
         let trimmedKeyIsEmpty: Bool
         let interval: TimeInterval
     }
@@ -37,7 +38,7 @@ public final class ZenmuxAPIService: ObservableObject {
         inFlightRefreshTask?.cancel()
     }
 
-    public func refresh(apiKey: String) async {
+    public func refresh(apiKey: String, apiBaseURLString: String) async {
         inFlightRefreshTask?.cancel()
         requestSequence &+= 1
         let requestID = requestSequence
@@ -51,11 +52,11 @@ public final class ZenmuxAPIService: ObservableObject {
             AppLog.refresh.warning("Refresh \(requestID) skipped because API key is empty")
             return
         }
-        guard URL(string: AppConstants.API.subscriptionDetailURLString) != nil else {
+        guard AppConstants.API.subscriptionDetailURL(baseURLString: apiBaseURLString) != nil else {
             isRefreshing = false
             inFlightRefreshTask = nil
-            lastError = ZenmuxAPIError(.invalidURL, diagnosticMessage: "Invalid URL string: \(AppConstants.API.subscriptionDetailURLString)")
-            AppLog.refresh.error("Refresh \(requestID) skipped because API URL is invalid")
+            lastError = ZenmuxAPIError(.invalidURL, diagnosticMessage: "Invalid API base URL: \(apiBaseURLString)")
+            AppLog.refresh.error("Refresh \(requestID) skipped because API base URL is invalid")
             return
         }
 
@@ -64,7 +65,7 @@ public final class ZenmuxAPIService: ObservableObject {
         AppLog.refresh.info("Refresh \(requestID) started")
 
         let task = Task { [apiClient] in
-            try await apiClient.fetchSubscription(apiKey: key)
+            try await apiClient.fetchSubscription(apiKey: key, apiBaseURLString: apiBaseURLString)
         }
         inFlightRefreshTask = task
 
@@ -121,13 +122,14 @@ public final class ZenmuxAPIService: ObservableObject {
                     return AutoRefreshSnapshot(
                         alwaysRefresh: settings.alwaysRefresh,
                         apiKey: settings.apiKey,
+                        apiBaseURLString: settings.apiBaseURLString,
                         trimmedKeyIsEmpty: settings.trimmedAPIKey.isEmpty,
                         interval: normalizedInterval
                     )
                 }
 
                 if snapshot.alwaysRefresh, !snapshot.trimmedKeyIsEmpty {
-                    await self.refresh(apiKey: snapshot.apiKey)
+                    await self.refresh(apiKey: snapshot.apiKey, apiBaseURLString: snapshot.apiBaseURLString)
                 } else {
                     AppLog.refresh.debug("Auto refresh skipped; enabled=\(snapshot.alwaysRefresh), hasKey=\(!snapshot.trimmedKeyIsEmpty)")
                 }

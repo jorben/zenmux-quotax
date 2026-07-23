@@ -100,13 +100,13 @@ public struct ZenmuxAPIClient: Sendable {
         return proxy
     }
 
-    public func fetchSubscription(apiKey: String) async throws -> ZenmuxSubscriptionData {
+    public func fetchSubscription(apiKey: String, apiBaseURLString: String) async throws -> ZenmuxSubscriptionData {
         let key = apiKey.trimmingCharacters(in: .whitespacesAndNewlines)
         guard !key.isEmpty else {
             throw ZenmuxAPIError(.noAPIKey, diagnosticMessage: "Attempted subscription refresh without an API key")
         }
-        guard let url = URL(string: AppConstants.API.subscriptionDetailURLString) else {
-            throw ZenmuxAPIError(.invalidURL, diagnosticMessage: "Invalid URL string: \(AppConstants.API.subscriptionDetailURLString)")
+        guard let url = AppConstants.API.subscriptionDetailURL(baseURLString: apiBaseURLString) else {
+            throw ZenmuxAPIError(.invalidURL, diagnosticMessage: "Invalid API base URL: \(apiBaseURLString)")
         }
 
         var request = URLRequest(url: url, cachePolicy: .reloadIgnoringLocalAndRemoteCacheData, timeoutInterval: AppConstants.Network.timeoutInterval)
