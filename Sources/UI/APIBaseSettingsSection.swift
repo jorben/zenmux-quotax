@@ -78,7 +78,7 @@ struct APIBaseSettingsSection: View {
         case .zenmuxDev:
             baseURLString = AppConstants.API.zenmuxDevBaseURLString
         case .custom:
-            baseURLString = customAPIBaseInput
+            baseURLString = customAPIBaseInput.trimmingCharacters(in: .whitespacesAndNewlines)
         }
 
         guard AppConstants.API.subscriptionDetailURL(baseURLString: baseURLString) != nil else {
@@ -89,7 +89,7 @@ struct APIBaseSettingsSection: View {
 
         settings.apiBaseOption = apiBaseOption
         if apiBaseOption == .custom {
-            settings.customAPIBase = customAPIBaseInput
+            settings.customAPIBase = baseURLString
         }
         error = nil
         showSaved = true
