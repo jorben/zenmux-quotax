@@ -3,8 +3,37 @@ import Foundation
 
 public enum AppConstants {
     public enum API {
-        public static let subscriptionDetailURLString = "https://zenmux.ai/api/v1/management/subscription/detail"
-        public static let managementPortalURLString = "https://zenmux.ai/platform/management"
+        public static let zenmuxAIBaseURLString = "https://zenmux.ai"
+        public static let zenmuxDevBaseURLString = "https://zenmux.dev"
+
+        private static let subscriptionDetailPathComponents = ["api", "v1", "management", "subscription", "detail"]
+        private static let managementPortalPathComponents = ["platform", "management"]
+
+        public static func subscriptionDetailURL(baseURLString: String) -> URL? {
+            url(baseURLString: baseURLString, pathComponents: subscriptionDetailPathComponents)
+        }
+
+        public static func managementPortalURL(baseURLString: String) -> URL? {
+            url(baseURLString: baseURLString, pathComponents: managementPortalPathComponents)
+        }
+
+        private static func url(baseURLString: String, pathComponents: [String]) -> URL? {
+            let trimmedBaseURLString = baseURLString.trimmingCharacters(in: .whitespacesAndNewlines)
+            guard var components = URLComponents(string: trimmedBaseURLString),
+                let scheme = components.scheme?.lowercased(),
+                ["http", "https"].contains(scheme),
+                components.host != nil
+            else {
+                return nil
+            }
+
+            components.query = nil
+            components.fragment = nil
+            guard let baseURL = components.url else { return nil }
+            return pathComponents.reduce(baseURL) { url, pathComponent in
+                url.appendingPathComponent(pathComponent)
+            }
+        }
     }
 
     public enum Network {
