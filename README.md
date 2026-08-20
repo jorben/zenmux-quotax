@@ -17,7 +17,7 @@
   <a href="README.md">English</a> · <a href="README_zh.md">简体中文</a>
 </p>
 
-Quotax sits in the macOS status bar and keeps ZenMux quota usage visible without opening the management portal. It fetches subscription data from the ZenMux Management API, displays 5-hour and 7-day quota percentages in the menu bar, and provides a compact detail panel for quota windows, monthly limits, refresh status, and errors.
+Quotax sits in the macOS status bar and keeps ZenMux quota usage visible without opening the management portal. It fetches subscription data from the ZenMux Management API, displays 5-hour and 7-day quota percentages in the menu bar, and provides a compact detail panel for a daily tokens-or-cost chart for the current subscription cycle, quota windows, monthly limits, refresh status, and errors.
 
 > [!NOTE]
 > This repository is source-first. There is no Swift Package manifest or Xcode project; `scripts/build.sh` compiles the app directly with `swiftc`.
@@ -28,6 +28,7 @@ Quotax sits in the macOS status bar and keeps ZenMux quota usage visible without
 
 - Shows 5-hour and 7-day quota percentages directly in the macOS menu bar.
 - Displays detailed 5-hour, 7-day, and monthly quota cards in a SwiftUI menu panel.
+- Shows a daily tokens-or-cost bar chart for the current subscription cycle; the statistics API reports data through yesterday.
 - Supports manual refresh and automatic refresh with a configurable interval.
 - Stores the ZenMux Management API key and preferences in `UserDefaults`.
 - Supports launch at login through `ServiceManagement`.
@@ -165,4 +166,3 @@ Quotax is inspired by [zenmux-monitor](https://github.com/jianxing-chen/zenmux-m
 ## License
 
 Quotax is licensed under the [Apache License 2.0](LICENSE).
-

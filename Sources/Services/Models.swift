@@ -1,5 +1,19 @@
 import Foundation
 
+public enum ZenmuxStatisticsMetric: String, CaseIterable, Identifiable, Sendable {
+    case tokens
+    case cost
+
+    public var id: String { rawValue }
+
+    public var title: String {
+        switch self {
+        case .tokens: return "Tokens"
+        case .cost: return "Cost"
+        }
+    }
+}
+
 public struct ZenmuxSubscriptionResponse: Decodable {
     public var success: Bool?
     public var statusCode: Int?
@@ -166,6 +180,146 @@ public struct ZenmuxPlan: Decodable, Equatable {
         let decodedInterval = try container.decodeFlexibleStringIfPresent(forKey: .interval)
         let decodedExpiresAt = try container.decodeFlexibleStringIfPresent(forKey: .expiresAt)
         self.init(tier: decodedTier, amountUSD: decodedAmount, interval: decodedInterval, expiresAt: decodedExpiresAt)
+    }
+}
+
+public struct ZenmuxStatisticsResponse: Decodable {
+    public var success: Bool?
+    public var statusCode: Int?
+    public var message: String?
+    public var data: ZenmuxStatisticsData?
+
+    enum CodingKeys: String, CodingKey {
+        case success
+        case statusCode
+        case message
+        case data
+    }
+
+    public init(
+        success: Bool? = nil,
+        statusCode: Int? = nil,
+        message: String? = nil,
+        data: ZenmuxStatisticsData? = nil
+    ) {
+        self.success = success
+        self.statusCode = statusCode
+        self.message = message
+        self.data = data
+    }
+
+    public init(from decoder: Decoder) throws {
+        let container = try decoder.container(keyedBy: CodingKeys.self)
+        success = try container.decodeIfPresent(Bool.self, forKey: .success)
+        statusCode = try container.decodeIfPresent(Int.self, forKey: .statusCode)
+        message = try container.decodeIfPresent(String.self, forKey: .message)
+        data = try container.decodeIfPresent(ZenmuxStatisticsData.self, forKey: .data)
+
+        if data == nil {
+            data = try? ZenmuxStatisticsData(from: decoder)
+        }
+    }
+}
+
+public struct ZenmuxStatisticsData: Decodable, Equatable, Sendable {
+    public var metric: String?
+    public var bucketWidth: String?
+    public var startingAt: String?
+    public var endingAt: String?
+    public var totalBuckets: Int?
+    public var series: [ZenmuxStatisticsBucket]
+
+    enum CodingKeys: String, CodingKey {
+        case metric
+        case bucketWidth = "bucket_width"
+        case startingAt = "starting_at"
+        case endingAt = "ending_at"
+        case totalBuckets = "total_buckets"
+        case series
+    }
+
+    public init(
+        metric: String? = nil,
+        bucketWidth: String? = nil,
+        startingAt: String? = nil,
+        endingAt: String? = nil,
+        totalBuckets: Int? = nil,
+        series: [ZenmuxStatisticsBucket] = []
+    ) {
+        self.metric = metric
+        self.bucketWidth = bucketWidth
+        self.startingAt = startingAt
+        self.endingAt = endingAt
+        self.totalBuckets = totalBuckets
+        self.series = series
+    }
+
+    public init(from decoder: Decoder) throws {
+        let container = try decoder.container(keyedBy: CodingKeys.self)
+        metric = try container.decodeFlexibleStringIfPresent(forKey: .metric)
+        bucketWidth = try container.decodeFlexibleStringIfPresent(forKey: .bucketWidth)
+        startingAt = try container.decodeFlexibleStringIfPresent(forKey: .startingAt)
+        endingAt = try container.decodeFlexibleStringIfPresent(forKey: .endingAt)
+        totalBuckets = try container.decodeFlexibleIntIfPresent(forKey: .totalBuckets)
+        series = try container.decodeIfPresent([ZenmuxStatisticsBucket].self, forKey: .series) ?? []
+    }
+}
+
+public struct ZenmuxStatisticsBucket: Decodable, Equatable, Sendable {
+    public var period: String?
+    public var date: String?
+    public var models: [ZenmuxStatisticsModelValue]
+
+    enum CodingKeys: String, CodingKey {
+        case period
+        case date
+        case models
+    }
+
+    public init(
+        period: String? = nil,
+        date: String? = nil,
+        models: [ZenmuxStatisticsModelValue] = []
+    ) {
+        self.period = period
+        self.date = date
+        self.models = models
+    }
+
+    public init(from decoder: Decoder) throws {
+        let container = try decoder.container(keyedBy: CodingKeys.self)
+        period = try container.decodeFlexibleStringIfPresent(forKey: .period)
+        date = try container.decodeFlexibleStringIfPresent(forKey: .date)
+        models = try container.decodeIfPresent([ZenmuxStatisticsModelValue].self, forKey: .models) ?? []
+    }
+}
+
+public struct ZenmuxStatisticsModelValue: Decodable, Equatable, Sendable {
+    public var model: String?
+    public var label: String?
+    public var value: Double?
+
+    enum CodingKeys: String, CodingKey {
+        case model
+        case label
+        case value
+    }
+
+    public init(
+        model: String? = nil,
+        label: String? = nil,
+        value: Double? = nil
+    ) {
+        self.model = model
+        self.label = label
+        self.value = value
+    }
+
+    public init(from decoder: Decoder) throws {
+        let container = try decoder.container(keyedBy: CodingKeys.self)
+        model = try container.decodeFlexibleStringIfPresent(forKey: .model)
+        label = try container.decodeFlexibleStringIfPresent(forKey: .label)
+        value = try container.decodeFlexibleDoubleIfPresent(forKey: .value)
     }
 }
 
