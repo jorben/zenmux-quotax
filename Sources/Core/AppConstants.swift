@@ -7,10 +7,31 @@ public enum AppConstants {
         public static let zenmuxDevBaseURLString = "https://zenmux.dev"
 
         private static let subscriptionDetailPathComponents = ["api", "v1", "management", "subscription", "detail"]
+        private static let statisticsTimeseriesPathComponents = ["api", "v1", "management", "statistics", "timeseries"]
         private static let managementPortalPathComponents = ["platform", "management"]
 
         public static func subscriptionDetailURL(baseURLString: String) -> URL? {
             url(baseURLString: baseURLString, pathComponents: subscriptionDetailPathComponents)
+        }
+
+        public static func statisticsTimeseriesURL(
+            baseURLString: String,
+            metric: ZenmuxStatisticsMetric,
+            startingAt: String,
+            endingAt: String
+        ) -> URL? {
+            guard let baseURL = url(baseURLString: baseURLString, pathComponents: statisticsTimeseriesPathComponents) else {
+                return nil
+            }
+
+            var components = URLComponents(url: baseURL, resolvingAgainstBaseURL: false)
+            components?.queryItems = [
+                URLQueryItem(name: "metric", value: metric.rawValue),
+                URLQueryItem(name: "bucket_width", value: "1d"),
+                URLQueryItem(name: "starting_at", value: startingAt),
+                URLQueryItem(name: "ending_at", value: endingAt)
+            ]
+            return components?.url
         }
 
         public static func managementPortalURL(baseURLString: String) -> URL? {

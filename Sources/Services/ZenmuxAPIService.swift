@@ -3,6 +3,10 @@ import Foundation
 @MainActor
 public final class ZenmuxAPIService: ObservableObject {
     @Published public private(set) var subscriptionData: ZenmuxSubscriptionData?
+    @Published public private(set) var statisticsTokens: ZenmuxStatisticsData?
+    @Published public private(set) var statisticsCost: ZenmuxStatisticsData?
+    @Published public private(set) var statisticsTokensError: ZenmuxAPIError?
+    @Published public private(set) var statisticsCostError: ZenmuxAPIError?
     @Published public private(set) var lastError: ZenmuxAPIError?
     @Published public private(set) var lastUpdated: Date?
     @Published public private(set) var isPaused: Bool = false
@@ -10,9 +14,12 @@ public final class ZenmuxAPIService: ObservableObject {
 
     private var apiClient: ZenmuxAPIClient
     private var refreshTask: Task<Void, Never>?
-    private var inFlightRefreshTask: Task<ZenmuxSubscriptionData, Error>?
+    private var inFlightRefreshTask: Task<RefreshResult, Error>?
     private var requestSequence: UInt64 = 0
     private var activeRequestID: UInt64?
+
+    private static let statisticsDayCount = 30
+    private static let maxStatisticsBuckets = 60
 
     private struct AutoRefreshSnapshot {
         let alwaysRefresh: Bool
@@ -20,6 +27,19 @@ public final class ZenmuxAPIService: ObservableObject {
         let apiBaseURLString: String
         let trimmedKeyIsEmpty: Bool
         let interval: TimeInterval
+    }
+
+    private struct RefreshResult {
+        let subscriptionData: ZenmuxSubscriptionData
+        let statisticsTokens: ZenmuxStatisticsData?
+        let statisticsCost: ZenmuxStatisticsData?
+        let statisticsTokensError: ZenmuxAPIError?
+        let statisticsCostError: ZenmuxAPIError?
+    }
+
+    private struct StatisticsFetchResult {
+        let data: ZenmuxStatisticsData?
+        let error: ZenmuxAPIError?
     }
 
     public init(apiClient: ZenmuxAPIClient = ZenmuxAPIClient()) {
@@ -65,17 +85,25 @@ public final class ZenmuxAPIService: ObservableObject {
         AppLog.refresh.info("Refresh \(requestID) started")
 
         let task = Task { [apiClient] in
-            try await apiClient.fetchSubscription(apiKey: key, apiBaseURLString: apiBaseURLString)
+            try await Self.loadRefreshData(
+                apiClient: apiClient,
+                apiKey: key,
+                apiBaseURLString: apiBaseURLString
+            )
         }
         inFlightRefreshTask = task
 
         do {
-            let data = try await task.value
+            let result = try await task.value
             guard activeRequestID == requestID else {
                 AppLog.refresh.debug("Ignoring stale refresh \(requestID) success")
                 return
             }
-            subscriptionData = data
+            subscriptionData = result.subscriptionData
+            statisticsTokens = result.statisticsTokens
+            statisticsCost = result.statisticsCost
+            statisticsTokensError = result.statisticsTokensError
+            statisticsCostError = result.statisticsCostError
             lastError = nil
             lastUpdated = Date()
             isRefreshing = false
@@ -105,6 +133,124 @@ public final class ZenmuxAPIService: ObservableObject {
             inFlightRefreshTask = nil
             AppLog.refresh.error("Refresh \(requestID) failed unexpectedly: \(error.localizedDescription)")
         }
+    }
+
+    private static func loadRefreshData(
+        apiClient: ZenmuxAPIClient,
+        apiKey: String,
+        apiBaseURLString: String
+    ) async throws -> RefreshResult {
+        let subscriptionData = try await apiClient.fetchSubscription(
+            apiKey: apiKey,
+            apiBaseURLString: apiBaseURLString
+        )
+
+        guard let dateRange = ZenmuxStatisticsDateRange.recentDays(Self.statisticsDayCount) else {
+            return RefreshResult(
+                subscriptionData: subscriptionData,
+                statisticsTokens: nil,
+                statisticsCost: nil,
+                statisticsTokensError: nil,
+                statisticsCostError: nil
+            )
+        }
+
+        async let tokensResult = fetchStatistics(
+            apiClient: apiClient,
+            apiKey: apiKey,
+            apiBaseURLString: apiBaseURLString,
+            metric: .tokens,
+            dateRange: dateRange
+        )
+        async let costResult = fetchStatistics(
+            apiClient: apiClient,
+            apiKey: apiKey,
+            apiBaseURLString: apiBaseURLString,
+            metric: .cost,
+            dateRange: dateRange
+        )
+
+        let tokens = await tokensResult
+        let cost = await costResult
+        return RefreshResult(
+            subscriptionData: subscriptionData,
+            statisticsTokens: tokens.data,
+            statisticsCost: cost.data,
+            statisticsTokensError: tokens.error,
+            statisticsCostError: cost.error
+        )
+    }
+
+    private static func fetchStatistics(
+        apiClient: ZenmuxAPIClient,
+        apiKey: String,
+        apiBaseURLString: String,
+        metric: ZenmuxStatisticsMetric,
+        dateRange: ZenmuxStatisticsDateRange
+    ) async -> StatisticsFetchResult {
+        var responses: [ZenmuxStatisticsData] = []
+
+        for chunk in dateRange.chunks(maxBucketCount: maxStatisticsBuckets) {
+            do {
+                let response = try await apiClient.fetchStatistics(
+                    apiKey: apiKey,
+                    apiBaseURLString: apiBaseURLString,
+                    metric: metric,
+                    startingAt: chunk.startingAt,
+                    endingAt: chunk.endingAt
+                )
+                responses.append(response)
+            } catch is CancellationError {
+                return StatisticsFetchResult(data: nil, error: nil)
+            } catch {
+                let apiError = normalizedAPIError(from: error)
+                AppLog.refresh.warning("Statistics \(metric.rawValue) refresh failed: \(apiError.type.rawValue)")
+                return StatisticsFetchResult(data: nil, error: apiError)
+            }
+        }
+
+        guard !responses.isEmpty else {
+            return StatisticsFetchResult(data: nil, error: nil)
+        }
+        return StatisticsFetchResult(
+            data: mergeStatistics(responses, metric: metric, dateRange: dateRange),
+            error: nil
+        )
+    }
+
+    private static func mergeStatistics(
+        _ responses: [ZenmuxStatisticsData],
+        metric: ZenmuxStatisticsMetric,
+        dateRange: ZenmuxStatisticsDateRange
+    ) -> ZenmuxStatisticsData {
+        var bucketsByDate: [String: ZenmuxStatisticsBucket] = [:]
+        for response in responses {
+            for bucket in response.series {
+                guard let date = bucket.date else { continue }
+                bucketsByDate[date] = bucket
+            }
+        }
+
+        let series = bucketsByDate.keys.sorted().compactMap { bucketsByDate[$0] }
+        return ZenmuxStatisticsData(
+            metric: metric.rawValue,
+            bucketWidth: "1d",
+            startingAt: dateRange.startingAt,
+            endingAt: dateRange.endingAt,
+            totalBuckets: series.count,
+            series: series
+        )
+    }
+
+    private static func normalizedAPIError(from error: Error) -> ZenmuxAPIError {
+        if let apiError = error as? ZenmuxAPIError {
+            return apiError
+        }
+        return ZenmuxAPIError(
+            .networkError,
+            message: error.localizedDescription,
+            diagnosticMessage: String(describing: error)
+        )
     }
 
     public func startAutoRefresh(settings: SettingsManager) {
