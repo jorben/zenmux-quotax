@@ -10,6 +10,7 @@ struct MenuStatisticsChartView: View {
     let timeZone: TimeZone
 
     @State private var selectedMetric: ZenmuxStatisticsMetric = .tokens
+    @State private var hoveredPointID: String?
 
     private var availableMetrics: [ZenmuxStatisticsMetric] {
         ZenmuxStatisticsMetric.allCases.filter { metric in
@@ -79,6 +80,7 @@ struct MenuStatisticsChartView: View {
             normalizeSelectedMetric()
         }
         .onChange(of: availableMetrics) { _, _ in
+            hoveredPointID = nil
             normalizeSelectedMetric()
         }
     }
@@ -119,8 +121,8 @@ struct MenuStatisticsChartView: View {
                 x: .value("Day", point.date, unit: .day),
                 y: .value(activeMetric.title, point.value)
             )
-            .foregroundStyle(Color.accentColor.opacity(0.72))
-            .cornerRadius(3)
+            .foregroundStyle(barColor(for: point))
+            .cornerRadius(point.id == hoveredPointID ? 4 : 3)
         }
         .chartYScale(domain: 0...yAxisMaximum(points: points))
         .chartXAxis {
@@ -154,6 +156,16 @@ struct MenuStatisticsChartView: View {
                 .background(Color.primary.opacity(0.025))
                 .clipShape(RoundedRectangle(cornerRadius: 8, style: .continuous))
         }
+        .chartOverlay { proxy in
+            GeometryReader { geometry in
+                Rectangle()
+                    .fill(.clear)
+                    .contentShape(Rectangle())
+                    .onContinuousHover { phase in
+                        updateHoveredPoint(phase, proxy: proxy, geometry: geometry, points: points)
+                    }
+            }
+        }
         .frame(height: 148)
         .accessibilityElement(children: .contain)
         .accessibilityLabel("Daily \(activeMetric.title.lowercased()) chart")
@@ -165,7 +177,7 @@ struct MenuStatisticsChartView: View {
         let lastDate = points.last.map { displayDateFormatter.string(from: $0.date) } ?? "—"
 
         return HStack(alignment: .firstTextBaseline, spacing: 8) {
-            Text("Average \(metricValueText(average))/day")
+            Text(summaryText(points: points, average: average))
                 .font(.caption)
                 .fontWeight(.semibold)
                 .monospacedDigit()
@@ -176,6 +188,53 @@ struct MenuStatisticsChartView: View {
                 .font(.caption2)
                 .foregroundStyle(.secondary)
                 .lineLimit(1)
+        }
+        .animation(.easeOut(duration: 0.12), value: hoveredPointID)
+    }
+
+    private func summaryText(points: [DailyStatisticsPoint], average: Double) -> String {
+        guard let hoveredPointID, let hoveredPoint = points.first(where: { $0.id == hoveredPointID }) else {
+            return "Average \(metricValueText(average))/day"
+        }
+        return "\(displayDateFormatter.string(from: hoveredPoint.date)) · \(metricValueText(hoveredPoint.value))"
+    }
+
+    private func barColor(for point: DailyStatisticsPoint) -> Color {
+        point.id == hoveredPointID ? Color.accentColor : Color.accentColor.opacity(0.72)
+    }
+
+    private func updateHoveredPoint(
+        _ phase: HoverPhase,
+        proxy: ChartProxy,
+        geometry: GeometryProxy,
+        points: [DailyStatisticsPoint]
+    ) {
+        switch phase {
+        case .active(let location):
+            guard let plotFrame = proxy.plotFrame else {
+                hoveredPointID = nil
+                return
+            }
+
+            let plotRect = geometry[plotFrame]
+            guard plotRect.contains(location) else {
+                hoveredPointID = nil
+                return
+            }
+
+            let plotX = location.x - plotRect.origin.x
+            guard let hoveredDate: Date = proxy.value(atX: plotX, as: Date.self) else {
+                hoveredPointID = nil
+                return
+            }
+
+            hoveredPointID =
+                points.min {
+                    abs($0.date.timeIntervalSince(hoveredDate))
+                        < abs($1.date.timeIntervalSince(hoveredDate))
+                }?.id
+        case .ended:
+            hoveredPointID = nil
         }
     }
 
