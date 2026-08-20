@@ -214,10 +214,6 @@ public struct ZenmuxStatisticsResponse: Decodable {
         statusCode = try container.decodeIfPresent(Int.self, forKey: .statusCode)
         message = try container.decodeIfPresent(String.self, forKey: .message)
         data = try container.decodeIfPresent(ZenmuxStatisticsData.self, forKey: .data)
-
-        if data == nil {
-            data = try? ZenmuxStatisticsData(from: decoder)
-        }
     }
 }
 

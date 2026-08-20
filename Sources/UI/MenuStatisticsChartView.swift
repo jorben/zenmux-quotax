@@ -356,7 +356,15 @@ struct MenuStatisticsChartView: View {
         default:
             return decimalNumber(value, maximumFractionDigits: 0)
         }
-        return String(format: "%.1f%@", scaledValue, suffix)
+
+        let formatter = NumberFormatter()
+        formatter.locale = Locale(identifier: "en_US_POSIX")
+        formatter.numberStyle = .decimal
+        formatter.usesGroupingSeparator = false
+        formatter.minimumFractionDigits = 1
+        formatter.maximumFractionDigits = 1
+        let formattedValue = formatter.string(from: NSNumber(value: scaledValue)) ?? String(scaledValue)
+        return formattedValue + suffix
     }
 
     private func decimalNumber(_ value: Double, maximumFractionDigits: Int) -> String {
