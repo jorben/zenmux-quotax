@@ -17,7 +17,7 @@
   <a href="README.md">English</a> · <a href="README_zh.md">简体中文</a>
 </p>
 
-Quotax 驻留在 macOS 状态栏中，让你无需打开管理后台也能查看 ZenMux 额度使用情况。它通过 ZenMux Management API 拉取订阅数据，在菜单栏显示 5 小时与 7 天额度百分比，并在紧凑面板中展示当前订阅周期内按日统计的 Token 用量与费用柱状图、额度窗口、月度限制、刷新状态和错误信息。
+Quotax 驻留在 macOS 状态栏中，让你无需打开管理后台也能查看 ZenMux 额度使用情况。它通过 ZenMux Management API 拉取订阅数据，在菜单栏显示 5 小时与 7 天额度百分比，并在紧凑面板中展示最近 30 天（含当日）按日统计的 Token 用量与费用柱状图、额度窗口、月度限制、刷新状态和错误信息。
 
 > [!NOTE]
 > 本仓库是源码优先项目。当前没有 Swift Package manifest 或 Xcode project；`scripts/build.sh` 会直接使用 `swiftc` 编译应用。
@@ -28,7 +28,7 @@ Quotax 驻留在 macOS 状态栏中，让你无需打开管理后台也能查看
 
 - 在 macOS 菜单栏直接显示 5 小时与 7 天额度百分比。
 - 在 SwiftUI 菜单面板中展示 5 小时、7 天和月度额度卡片。
-- 在当前订阅周期内按天展示 Token 用量或费用柱状图；统计接口仅返回截至昨日的数据。
+- 按天展示最近 30 天（含当日）的 Token 用量或费用柱状图；统计接口可能要到下一次聚合后才返回当日用量。
 - 支持手动刷新，以及带可配置间隔的自动刷新。
 - 使用 `UserDefaults` 保存 ZenMux Management API Key 和偏好设置。
 - 通过 `ServiceManagement` 支持开机登录时启动。

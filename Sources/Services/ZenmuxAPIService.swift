@@ -18,6 +18,7 @@ public final class ZenmuxAPIService: ObservableObject {
     private var requestSequence: UInt64 = 0
     private var activeRequestID: UInt64?
 
+    private static let statisticsDayCount = 30
     private static let maxStatisticsBuckets = 60
 
     private struct AutoRefreshSnapshot {
@@ -144,7 +145,7 @@ public final class ZenmuxAPIService: ObservableObject {
             apiBaseURLString: apiBaseURLString
         )
 
-        guard let dateRange = ZenmuxSubscriptionCycle.currentStatisticsRange(from: subscriptionData) else {
+        guard let dateRange = ZenmuxStatisticsDateRange.recentDays(Self.statisticsDayCount) else {
             return RefreshResult(
                 subscriptionData: subscriptionData,
                 statisticsTokens: nil,
@@ -234,8 +235,8 @@ public final class ZenmuxAPIService: ObservableObject {
         return ZenmuxStatisticsData(
             metric: metric.rawValue,
             bucketWidth: "1d",
-            startingAt: responses.first?.startingAt ?? dateRange.startingAt,
-            endingAt: responses.last?.endingAt ?? dateRange.endingAt,
+            startingAt: dateRange.startingAt,
+            endingAt: dateRange.endingAt,
             totalBuckets: series.count,
             series: series
         )

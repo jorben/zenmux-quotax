@@ -180,18 +180,18 @@ struct MenuStatisticsChartView: View {
     }
 
     private var periodText: String {
-        guard let data = displayedData else { return "Current subscription cycle" }
+        guard let data = displayedData else { return "Last 30 days" }
         guard
             let startingAt = data.startingAt,
             let endingAt = data.endingAt,
             let startDate = chartDate(from: startingAt),
             let endDate = chartDate(from: endingAt)
         else {
-            return "Current subscription cycle"
+            return "Last 30 days"
         }
         let start = displayDateFormatter.string(from: startDate)
         let end = displayDateFormatter.string(from: endDate)
-        return "Current cycle · \(start) – \(end)"
+        return "Last 30 days · \(start) – \(end)"
     }
 
     private var emptyState: some View {
@@ -216,8 +216,6 @@ struct MenuStatisticsChartView: View {
     }
 
     private func chartPoints(from data: ZenmuxStatisticsData) -> [DailyStatisticsPoint] {
-        guard !data.series.isEmpty else { return [] }
-
         var valuesByDate: [String: Double] = [:]
         for bucket in data.series {
             guard let dateString = bucket.date else { continue }
